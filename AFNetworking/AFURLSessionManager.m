@@ -217,6 +217,7 @@ didCompleteWithError:(NSError *)error
             });
         });
     } else {
+        // mo: 如果请求成功，则在一个 AF 的并行 queue 中，去做数据解析等后续操作
         dispatch_async(url_session_manager_processing_queue(), ^{
             NSError *serializationError = nil;
             responseObject = [manager.responseSerializer responseObjectForResponse:task.response data:data error:&serializationError];
@@ -490,22 +491,26 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 
     self.sessionConfiguration = configuration;
 
+    // mo: 初始化网络请求回调队列
     self.operationQueue = [[NSOperationQueue alloc] init];
-    self.operationQueue.maxConcurrentOperationCount = 1;
+    self.operationQueue.maxConcurrentOperationCount = 1; // mo: 代理回调线程最大并发数为 1
 
     self.responseSerializer = [AFJSONResponseSerializer serializer];
 
+    // mo: 默认安全策略 AFSSLPinningModeNone
     self.securityPolicy = [AFSecurityPolicy defaultPolicy];
 
 #if !TARGET_OS_WATCH
     self.reachabilityManager = [AFNetworkReachabilityManager sharedManager];
 #endif
-
+    // mo: 初始化任务代理的字典
     self.mutableTaskDelegatesKeyedByTaskIdentifier = [[NSMutableDictionary alloc] init];
 
+    // mo: 初始化锁
     self.lock = [[NSLock alloc] init];
     self.lock.name = AFURLSessionManagerLockName;
 
+    // mo: 后台进入时重新写入代理 ???
     [self.session getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
         for (NSURLSessionDataTask *task in dataTasks) {
             [self addDelegateForDataTask:task uploadProgress:nil downloadProgress:nil completionHandler:nil];

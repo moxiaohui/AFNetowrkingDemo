@@ -45,15 +45,20 @@ typedef NSString * (^AFQueryStringSerializationBlock)(NSURLRequest *request, id 
     - returns: The percent-escaped string.
  */
 NSString * AFPercentEscapedStringFromString(NSString *string) {
+    // mo: 一般分隔符
     static NSString * const kAFCharactersGeneralDelimitersToEncode = @":#[]@"; // does not include "?" or "/" due to RFC 3986 - Section 3.4
+    // mo: 子分隔符
     static NSString * const kAFCharactersSubDelimitersToEncode = @"!$&'()*+,;=";
-
+    
+    // mo: `URL查询`允许字符的集合
     NSMutableCharacterSet * allowedCharacterSet = [[NSCharacterSet URLQueryAllowedCharacterSet] mutableCopy];
+    // mo: 移除`系统允许字符集合`中的分隔符
     [allowedCharacterSet removeCharactersInString:[kAFCharactersGeneralDelimitersToEncode stringByAppendingString:kAFCharactersSubDelimitersToEncode]];
 
 	// FIXME: https://github.com/AFNetworking/AFNetworking/pull/3028
     // return [string stringByAddingPercentEncodingWithAllowedCharacters:allowedCharacterSet];
 
+    // mo: 下面的没看懂?????
     static NSUInteger const batchSize = 50;
 
     NSUInteger index = 0;
@@ -116,8 +121,10 @@ NSString * AFPercentEscapedStringFromString(NSString *string) {
 FOUNDATION_EXPORT NSArray * AFQueryStringPairsFromDictionary(NSDictionary *dictionary);
 FOUNDATION_EXPORT NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value);
 
+// mo: `查询字符串`序列化 样式
 NSString * AFQueryStringFromParameters(NSDictionary *parameters) {
     NSMutableArray *mutablePairs = [NSMutableArray array];
+    // mo: 根据参数生成pair
     for (AFQueryStringPair *pair in AFQueryStringPairsFromDictionary(parameters)) {
         [mutablePairs addObject:[pair URLEncodedStringValue]];
     }
@@ -137,24 +144,29 @@ NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value) {
     if ([value isKindOfClass:[NSDictionary class]]) {
         NSDictionary *dictionary = value;
         // Sort dictionary keys to ensure consistent ordering in query string, which is important when deserializing potentially ambiguous sequences, such as an array of dictionaries
+        // mo: 排序, 为了跟`查询字符串`中的顺序保持一致, 这在`序列化`和`反序列化`中很重要
         for (id nestedKey in [dictionary.allKeys sortedArrayUsingDescriptors:@[ sortDescriptor ]]) {
             id nestedValue = dictionary[nestedKey];
             if (nestedValue) {
-                [mutableQueryStringComponents addObjectsFromArray:AFQueryStringPairsFromKeyAndValue((key ? [NSString stringWithFormat:@"%@[%@]", key, nestedKey] : nestedKey), nestedValue)];
+                [mutableQueryStringComponents addObjectsFromArray:
+                 AFQueryStringPairsFromKeyAndValue((key ? [NSString stringWithFormat:@"%@[%@]", key, nestedKey] : nestedKey), nestedValue)];
             }
         }
     } else if ([value isKindOfClass:[NSArray class]]) {
         NSArray *array = value;
         for (id nestedValue in array) {
-            [mutableQueryStringComponents addObjectsFromArray:AFQueryStringPairsFromKeyAndValue([NSString stringWithFormat:@"%@[]", key], nestedValue)];
+            [mutableQueryStringComponents addObjectsFromArray:
+             AFQueryStringPairsFromKeyAndValue([NSString stringWithFormat:@"%@[]", key], nestedValue)];
         }
     } else if ([value isKindOfClass:[NSSet class]]) {
         NSSet *set = value;
         for (id obj in [set sortedArrayUsingDescriptors:@[ sortDescriptor ]]) {
-            [mutableQueryStringComponents addObjectsFromArray:AFQueryStringPairsFromKeyAndValue(key, obj)];
+            [mutableQueryStringComponents addObjectsFromArray:
+             AFQueryStringPairsFromKeyAndValue(key, obj)];
         }
     } else {
-        [mutableQueryStringComponents addObject:[[AFQueryStringPair alloc] initWithField:key value:value]];
+        [mutableQueryStringComponents addObject:
+         [[AFQueryStringPair alloc] initWithField:key value:value]];
     }
 
     return mutableQueryStringComponents;
@@ -172,15 +184,22 @@ NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value) {
 #pragma mark -
 
 static NSArray * AFHTTPRequestSerializerObservedKeyPaths() {
+    // mo : 利用`NSStringFromSelector`根据getter方法得到需要观察的`属性的字符串`数组
     static NSArray *_AFHTTPRequestSerializerObservedKeyPaths = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        _AFHTTPRequestSerializerObservedKeyPaths = @[NSStringFromSelector(@selector(allowsCellularAccess)), NSStringFromSelector(@selector(cachePolicy)), NSStringFromSelector(@selector(HTTPShouldHandleCookies)), NSStringFromSelector(@selector(HTTPShouldUsePipelining)), NSStringFromSelector(@selector(networkServiceType)), NSStringFromSelector(@selector(timeoutInterval))];
+        _AFHTTPRequestSerializerObservedKeyPaths =
+        @[NSStringFromSelector(@selector(allowsCellularAccess)), // 是否允许使用蜂窝无线电, 默认YES
+          NSStringFromSelector(@selector(cachePolicy)), // 缓存策略, 默认`CachePolicy` 由协议指定的针对该协议最好的实现方式
+          NSStringFromSelector(@selector(HTTPShouldHandleCookies)), // 创建的请求是否使用默认的cookie处理, 默认YES
+          NSStringFromSelector(@selector(HTTPShouldUsePipelining)), // 是否等待上一个请求响应后, 再请求
+          NSStringFromSelector(@selector(networkServiceType)), // 网络请求的服务类型
+          NSStringFromSelector(@selector(timeoutInterval))]; // 超时时间
     });
-
     return _AFHTTPRequestSerializerObservedKeyPaths;
 }
 
+// mo: 生成观察属性的context
 static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerObserverContext;
 
 @interface AFHTTPRequestSerializer ()
@@ -206,6 +225,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     self.stringEncoding = NSUTF8StringEncoding;
 
     self.mutableHTTPRequestHeaders = [NSMutableDictionary dictionary];
+    // mo: 并行队列
     self.requestHeaderModificationQueue = dispatch_queue_create("requestHeaderModificationQueue", DISPATCH_QUEUE_CONCURRENT);
 
     // Accept-Language HTTP Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.4
@@ -241,7 +261,9 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     // HTTP Method Definitions; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec9.html
     self.HTTPMethodsEncodingParametersInURI = [NSSet setWithObjects:@"GET", @"HEAD", @"DELETE", nil];
 
+    // mo: 初始化存放`已修改属性`的集合
     self.mutableObservedChangedKeyPaths = [NSMutableSet set];
+    // mo: 观察自身属性变化
     for (NSString *keyPath in AFHTTPRequestSerializerObservedKeyPaths()) {
         if ([self respondsToSelector:NSSelectorFromString(keyPath)]) {
             [self addObserver:self forKeyPath:keyPath options:NSKeyValueObservingOptionNew context:AFHTTPRequestSerializerObserverContext];
@@ -252,6 +274,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 }
 
 - (void)dealloc {
+    // mo: 移除观察者
     for (NSString *keyPath in AFHTTPRequestSerializerObservedKeyPaths()) {
         if ([self respondsToSelector:NSSelectorFromString(keyPath)]) {
             [self removeObserver:self forKeyPath:keyPath context:AFHTTPRequestSerializerObserverContext];
@@ -313,6 +336,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 - (void)setValue:(NSString *)value
 forHTTPHeaderField:(NSString *)field
 {
+    // mo: 串行写 - 使用`barrier`将任务添加到队列中，此任务执行的时候，其他任务停止执行
     dispatch_barrier_sync(self.requestHeaderModificationQueue, ^{
         [self.mutableHTTPRequestHeaders setValue:value forKey:field];
     });
@@ -320,6 +344,7 @@ forHTTPHeaderField:(NSString *)field
 
 - (NSString *)valueForHTTPHeaderField:(NSString *)field {
     NSString __block *value;
+    // mo: 并行读
     dispatch_sync(self.requestHeaderModificationQueue, ^{
         value = [self.mutableHTTPRequestHeaders valueForKey:field];
     });
@@ -352,7 +377,7 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark -
-
+#pragma mark - mo: 初始化`request`对象
 - (NSMutableURLRequest *)requestWithMethod:(NSString *)method
                                  URLString:(NSString *)URLString
                                 parameters:(id)parameters
@@ -367,7 +392,7 @@ forHTTPHeaderField:(NSString *)field
 
     NSMutableURLRequest *mutableRequest = [[NSMutableURLRequest alloc] initWithURL:url];
     mutableRequest.HTTPMethod = method;
-
+    // mo: 将自身已设置的属性->新建的request
     for (NSString *keyPath in self.mutableObservedChangedKeyPaths) {
         [mutableRequest setValue:[self valueForKeyPath:keyPath] forKey:keyPath];
     }
@@ -469,15 +494,15 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark - AFURLRequestSerialization
-
+#pragma mark - mo: request最终初始化
 - (NSURLRequest *)requestBySerializingRequest:(NSURLRequest *)request
                                withParameters:(id)parameters
                                         error:(NSError *__autoreleasing *)error
 {
     NSParameterAssert(request);
-
     NSMutableURLRequest *mutableRequest = [request mutableCopy];
-
+    
+    // mo: 设置请求头
     [self.HTTPRequestHeaders enumerateKeysAndObjectsUsingBlock:^(id field, id value, BOOL * __unused stop) {
         if (![request valueForHTTPHeaderField:field]) {
             [mutableRequest setValue:value forHTTPHeaderField:field];
@@ -485,8 +510,10 @@ forHTTPHeaderField:(NSString *)field
     }];
 
     NSString *query = nil;
-    if (parameters) {
-        if (self.queryStringSerialization) {
+    if (parameters) { // mo: 如果有参数
+        if (self.queryStringSerialization) { // mo: 有设置`查询字符串`的序列化block
+            
+            // mo: 调用该block获得生成的: queryString 和 error
             NSError *serializationError;
             query = self.queryStringSerialization(request, parameters, &serializationError);
 
@@ -498,7 +525,7 @@ forHTTPHeaderField:(NSString *)field
                 return nil;
             }
         } else {
-            switch (self.queryStringSerializationStyle) {
+            switch (self.queryStringSerializationStyle) { // mo: 有设置`查询字符串`的序列化的样式
                 case AFHTTPRequestQueryStringDefaultStyle:
                     query = AFQueryStringFromParameters(parameters);
                     break;
@@ -508,7 +535,7 @@ forHTTPHeaderField:(NSString *)field
 
     if ([self.HTTPMethodsEncodingParametersInURI containsObject:[[request HTTPMethod] uppercaseString]]) {
         if (query && query.length > 0) {
-            mutableRequest.URL = [NSURL URLWithString:[[mutableRequest.URL absoluteString] stringByAppendingFormat:mutableRequest.URL.query ? @"&%@" : @"?%@", query]];
+            mutableRequest.URL = [NSURL URLWithString:[[mutableRequest.URL absoluteString] stringByAppendingFormat:mutableRequest.URL.query ? @"&%@" : @"?%@", query]]; // mo: & or ? ???
         }
     } else {
         // #2864: an empty string is a valid x-www-form-urlencoded payload

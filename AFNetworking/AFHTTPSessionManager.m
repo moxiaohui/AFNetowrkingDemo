@@ -72,12 +72,13 @@
     }
 
     // Ensure terminal slash for baseURL path, so that NSURL +URLWithString:relativeToURL: works as expected
+    // mo: 确保`url`后面以`/`结尾, 如果不是会加上
     if ([[url path] length] > 0 && ![[url absoluteString] hasSuffix:@"/"]) {
         url = [url URLByAppendingPathComponent:@""];
     }
 
     self.baseURL = url;
-
+    // mo: 初始化`请求`和`响应`的序列化对象, 默认使用json作为响应序列化方式
     self.requestSerializer = [AFHTTPRequestSerializer serializer];
     self.responseSerializer = [AFJSONResponseSerializer serializer];
 
@@ -248,7 +249,7 @@
     return dataTask;
 }
 
-
+#pragma mark - mo: 最终的初始化方法
 - (NSURLSessionDataTask *)dataTaskWithHTTPMethod:(NSString *)method
                                        URLString:(NSString *)URLString
                                       parameters:(nullable id)parameters
@@ -259,11 +260,14 @@
                                          failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError *error))failure
 {
     NSError *serializationError = nil;
+    // mo: 运用`requestSerializer`请求序列化对象初始化`request`
     NSMutableURLRequest *request = [self.requestSerializer requestWithMethod:method URLString:[[NSURL URLWithString:URLString relativeToURL:self.baseURL] absoluteString] parameters:parameters error:&serializationError];
+    
+    // mo: 用`keyEnumerator`遍历keys, 此时不可更改字典 (还有个objectEnumerator可以遍历value)
     for (NSString *headerField in headers.keyEnumerator) {
         [request setValue:headers[headerField] forHTTPHeaderField:headerField];
     }
-    if (serializationError) {
+    if (serializationError) { // 序列化出错
         if (failure) {
             dispatch_async(self.completionQueue ?: dispatch_get_main_queue(), ^{
                 failure(nil, serializationError);
