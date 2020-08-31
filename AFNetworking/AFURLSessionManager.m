@@ -479,6 +479,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return [self initWithSessionConfiguration:nil];
 }
 
+#pragma mark - mo: URLSessionManager 初始化
 - (instancetype)initWithSessionConfiguration:(NSURLSessionConfiguration *)configuration {
     self = [super init];
     if (!self) {
