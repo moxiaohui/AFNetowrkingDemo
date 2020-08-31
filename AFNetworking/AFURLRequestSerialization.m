@@ -184,7 +184,7 @@ NSArray * AFQueryStringPairsFromKeyAndValue(NSString *key, id value) {
 #pragma mark -
 
 static NSArray * AFHTTPRequestSerializerObservedKeyPaths() {
-    // mo : 利用`NSStringFromSelector`根据getter方法得到需要观察的`属性的字符串`数组
+    // mo: 利用`NSStringFromSelector`根据getter方法得到需要观察的`属性的字符串`数组
     static NSArray *_AFHTTPRequestSerializerObservedKeyPaths = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -377,7 +377,7 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark -
-#pragma mark - mo: 初始化`request`对象
+#pragma mark - mo: 初始化`NSMutableURLRequest`
 - (NSMutableURLRequest *)requestWithMethod:(NSString *)method
                                  URLString:(NSString *)URLString
                                 parameters:(id)parameters
@@ -494,7 +494,7 @@ forHTTPHeaderField:(NSString *)field
 }
 
 #pragma mark - AFURLRequestSerialization
-#pragma mark - mo: request最终初始化
+#pragma mark - mo: 初始化`NSURLRequest`
 - (NSURLRequest *)requestBySerializingRequest:(NSURLRequest *)request
                                withParameters:(id)parameters
                                         error:(NSError *__autoreleasing *)error

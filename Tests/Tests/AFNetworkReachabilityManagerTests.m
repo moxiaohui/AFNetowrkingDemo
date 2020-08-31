@@ -20,7 +20,6 @@
 // THE SOFTWARE.
 
 #import "AFTestCase.h"
-
 #import "AFNetworkReachabilityManager.h"
 #import <netinet/in.h>
 #import <objc/message.h>

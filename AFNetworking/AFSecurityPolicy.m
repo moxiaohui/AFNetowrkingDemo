@@ -20,22 +20,17 @@
 // THE SOFTWARE.
 
 #import "AFSecurityPolicy.h"
-
 #import <AssertMacros.h>
 
 #if !TARGET_OS_IOS && !TARGET_OS_WATCH && !TARGET_OS_TV
 static NSData * AFSecKeyGetData(SecKeyRef key) {
     CFDataRef data = NULL;
-
     __Require_noErr_Quiet(SecItemExport(key, kSecFormatUnknown, kSecItemPemArmour, NULL, &data), _out);
-
     return (__bridge_transfer NSData *)data;
-
 _out:
     if (data) {
         CFRelease(data);
     }
-
     return nil;
 }
 #endif
@@ -55,6 +50,7 @@ static id AFPublicKeyForCertificate(NSData *certificate) {
     SecTrustRef allowedTrust = nil;
     SecTrustResultType result;
 
+    // mo: 根据data生成证书
     allowedCertificate = SecCertificateCreateWithData(NULL, (__bridge CFDataRef)certificate);
     __Require_Quiet(allowedCertificate != NULL, _out);
 
@@ -153,36 +149,32 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
 
 @implementation AFSecurityPolicy
 
+// mo: 获得bundle里的以`.cer`结尾的所有证书
 + (NSSet *)certificatesInBundle:(NSBundle *)bundle {
     NSArray *paths = [bundle pathsForResourcesOfType:@"cer" inDirectory:@"."];
-
     NSMutableSet *certificates = [NSMutableSet setWithCapacity:[paths count]];
     for (NSString *path in paths) {
         NSData *certificateData = [NSData dataWithContentsOfFile:path];
         [certificates addObject:certificateData];
     }
-
     return [NSSet setWithSet:certificates];
 }
 
 + (instancetype)defaultPolicy {
     AFSecurityPolicy *securityPolicy = [[self alloc] init];
     securityPolicy.SSLPinningMode = AFSSLPinningModeNone;
-
     return securityPolicy;
 }
 
 + (instancetype)policyWithPinningMode:(AFSSLPinningMode)pinningMode {
-    NSSet <NSData *> *defaultPinnedCertificates = [self certificatesInBundle:[NSBundle mainBundle]];
+    NSSet <NSData *> *defaultPinnedCertificates = [self certificatesInBundle:[NSBundle mainBundle]]; // mo: 所有证书
     return [self policyWithPinningMode:pinningMode withPinnedCertificates:defaultPinnedCertificates];
 }
 
 + (instancetype)policyWithPinningMode:(AFSSLPinningMode)pinningMode withPinnedCertificates:(NSSet *)pinnedCertificates {
     AFSecurityPolicy *securityPolicy = [[self alloc] init];
     securityPolicy.SSLPinningMode = pinningMode;
-
     [securityPolicy setPinnedCertificates:pinnedCertificates];
-
     return securityPolicy;
 }
 
@@ -191,9 +183,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     if (!self) {
         return nil;
     }
-
     self.validatesDomainName = YES;
-
     return self;
 }
 
