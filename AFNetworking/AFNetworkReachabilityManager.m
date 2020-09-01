@@ -32,7 +32,7 @@ NSString * const AFNetworkingReachabilityDidChangeNotification = @"com.alamofire
 NSString * const AFNetworkingReachabilityNotificationStatusItem = @"AFNetworkingReachabilityNotificationStatusItem";
 
 typedef void (^AFNetworkReachabilityStatusBlock)(AFNetworkReachabilityStatus status);
-// mo: 网络可访问性状态改变回调
+//mo: 网络可访问性状态改变回调
 typedef AFNetworkReachabilityManager * (^AFNetworkReachabilityStatusCallback)(AFNetworkReachabilityStatus status);
 
 NSString * AFStringFromNetworkReachabilityStatus(AFNetworkReachabilityStatus status) {
@@ -49,7 +49,7 @@ NSString * AFStringFromNetworkReachabilityStatus(AFNetworkReachabilityStatus sta
     }
 }
 
-// mo: 简化系统的网络状态标志 10 -> 4
+//mo: 简化系统的网络状态标志 10 -> 4
 // SCNetworkReachabilityFlags: 网络节点名称/地址的可访问性的标志, 如: 是否需要链接, 以及在连接时是否需要某些用户干预
 static AFNetworkReachabilityStatus AFNetworkReachabilityStatusForFlags(SCNetworkReachabilityFlags flags) {
     BOOL isReachable = ((flags & kSCNetworkReachabilityFlagsReachable) != 0);
@@ -87,13 +87,13 @@ static AFNetworkReachabilityStatus AFNetworkReachabilityStatusForFlags(SCNetwork
 /// @param flags 网络可访问性标记
 /// @param block 网络可访问性状态回调
 static void AFPostReachabilityStatusChange(SCNetworkReachabilityFlags flags, AFNetworkReachabilityStatusCallback block) {
-    AFNetworkReachabilityStatus status = AFNetworkReachabilityStatusForFlags(flags); // mo: 转换自定义status
-    dispatch_async(dispatch_get_main_queue(), ^{ // mo: 在主线程队列中异步执行
+    AFNetworkReachabilityStatus status = AFNetworkReachabilityStatusForFlags(flags); //mo: 转换自定义status
+    dispatch_async(dispatch_get_main_queue(), ^{ //mo: 在主线程队列中异步执行
         AFNetworkReachabilityManager *manager = nil;
         if (block) {
-            manager = block(status); // mo: 处理`网络可访问性`状态改变的回调
+            manager = block(status); //mo: 处理`网络可访问性`状态改变的回调
         }
-        // mo: 发出了`网络可访问性`状态改变的通知
+        //mo: 发出了`网络可访问性`状态改变的通知
         NSNotificationCenter *notificationCenter = [NSNotificationCenter defaultCenter];
         NSDictionary *userInfo = @{ AFNetworkingReachabilityNotificationStatusItem: @(status) };
         [notificationCenter postNotificationName:AFNetworkingReachabilityDidChangeNotification object:manager userInfo:userInfo];
@@ -116,7 +116,7 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
 }
 
 @interface AFNetworkReachabilityManager ()
-// mo: 获取网络配置和目标主机的可访问性, 可以用通知进行监听
+//mo: 获取网络配置和目标主机的可访问性, 可以用通知进行监听
 @property (readonly, nonatomic, assign) SCNetworkReachabilityRef networkReachability;
 @property (readwrite, nonatomic, assign) AFNetworkReachabilityStatus networkReachabilityStatus;
 @property (readwrite, nonatomic, copy) AFNetworkReachabilityStatusBlock networkReachabilityStatusBlock;
@@ -173,7 +173,7 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
 }
 
 - (instancetype)init {
-    // mo: 抛出异常, 提示使用指定初始化方法
+    //mo: 抛出异常, 提示使用指定初始化方法
     @throw [NSException exceptionWithName:NSGenericException
                                    reason:@"`-init` unavailable. Use `-initWithReachability:` instead"
                                  userInfo:nil];
@@ -209,19 +209,19 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
     }
 
     __weak __typeof(self)weakSelf = self;
-    // mo: 处理网络可访问性状态改变回调
+    //mo: 处理网络可访问性状态改变回调
     AFNetworkReachabilityStatusCallback callback = ^(AFNetworkReachabilityStatus status) {
-        __strong __typeof(weakSelf)strongSelf = weakSelf; // mo: 避免block在执行过程中, self突然被释放. 很可能造成逻辑异常, 甚至闪退
+        __strong __typeof(weakSelf)strongSelf = weakSelf; //mo: 避免block在执行过程中, self突然被释放. 很可能造成逻辑异常, 甚至闪退
 
         strongSelf.networkReachabilityStatus = status;
         if (strongSelf.networkReachabilityStatusBlock) {
-            strongSelf.networkReachabilityStatusBlock(status); // mo: 如果此block执行到一半时self释放, 多半情况下会crash !!!
+            strongSelf.networkReachabilityStatusBlock(status); //mo: 如果此block执行到一半时self释放, 多半情况下会crash !!!
         }
         
-        return strongSelf; // mo:TODO why? 仅仅是为了通知里的object么?
+        return strongSelf; //mo:TODO why? 仅仅是为了通知里的object么?
     };
 
-    // mo: 包含用户指定的数据 和 SCNetworkReachability回调
+    //mo: 包含用户指定的数据 和 SCNetworkReachability回调
     SCNetworkReachabilityContext context = {0, (__bridge void *)callback, AFNetworkReachabilityRetainCallback, AFNetworkReachabilityReleaseCallback, NULL};
     
     /* mo: SCNetworkReachabilitySetCallback
@@ -231,13 +231,13 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
      return: true 通知设置成功
     */
     SCNetworkReachabilitySetCallback(self.networkReachability, AFNetworkReachabilityCallback, &context);
-    // mo: 给`networkReachability`设置`runloop`和`mode`
+    //mo: 给`networkReachability`设置`runloop`和`mode`
     SCNetworkReachabilityScheduleWithRunLoop(self.networkReachability, CFRunLoopGetMain(), kCFRunLoopCommonModes);
 
-    // mo: dispatch_get_global_queue优先级 high default low background
+    //mo: dispatch_get_global_queue优先级 high default low background
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0),^{
         SCNetworkReachabilityFlags flags;
-        // mo: 确定是否可以使用当前网络配置访问给定目标
+        //mo: 确定是否可以使用当前网络配置访问给定目标
         if (SCNetworkReachabilityGetFlags(self.networkReachability, &flags)) {
             /* mo: `网络可访问性`状态改变
              触发已实现的 状态改变处理的回调
@@ -253,7 +253,7 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
     if (!self.networkReachability) {
         return;
     }
-    // mo: 将`networkReachability`从`runloop`的`mode`移除设置
+    //mo: 将`networkReachability`从`runloop`的`mode`移除设置
     SCNetworkReachabilityUnscheduleFromRunLoop(self.networkReachability, CFRunLoopGetMain(), kCFRunLoopCommonModes);
 }
 
@@ -277,7 +277,7 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
     }
     return [super keyPathsForValuesAffectingValueForKey:key];
 }
-// mo: 当某个属性的getter方法使用其他属性的值计算返回值时, 可以重写此方法
+//mo: 当某个属性的getter方法使用其他属性的值计算返回值时, 可以重写此方法
 
 @end
 #endif

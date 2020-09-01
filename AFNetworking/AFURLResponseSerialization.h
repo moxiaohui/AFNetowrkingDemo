@@ -212,8 +212,7 @@ FOUNDATION_EXPORT id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJ
  @param format The property list format.
  @param readOptions The property list reading options.
  */
-+ (instancetype)serializerWithFormat:(NSPropertyListFormat)format
-                         readOptions:(NSPropertyListReadOptions)readOptions;
++ (instancetype)serializerWithFormat:(NSPropertyListFormat)format readOptions:(NSPropertyListReadOptions)readOptions;
 
 @end
 
@@ -307,7 +306,6 @@ FOUNDATION_EXPORT NSString * const AFURLResponseSerializationErrorDomain;
  The corresponding value is an `NSData` containing the original data of the operation associated with an error. This key is only present in the `AFURLResponseSerializationErrorDomain`.
  */
 FOUNDATION_EXPORT NSString * const AFNetworkingOperationFailingURLResponseErrorKey;
-
 FOUNDATION_EXPORT NSString * const AFNetworkingOperationFailingURLResponseDataErrorKey;
 
 NS_ASSUME_NONNULL_END

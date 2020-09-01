@@ -107,7 +107,7 @@ NS_ASSUME_NONNULL_BEGIN
  */
 - (instancetype)initWithReachability:(SCNetworkReachabilityRef)reachability NS_DESIGNATED_INITIALIZER;
 
-// mo: 禁用一些初始化方法
+//mo: 禁用一些初始化方法
 /**
  *  Unavailable initializer
  */
@@ -201,7 +201,7 @@ NS_ASSUME_NONNULL_BEGIN
 
  @warning In order for network reachability to be monitored, include the `SystemConfiguration` framework in the active target's "Link Binary With Library" build phase, and add `#import <SystemConfiguration/SystemConfiguration.h>` to the header prefix of the project (`Prefix.pch`).
  */
-// mo:TODO FOUNDATION_EXPORT vs extern ??
+//mo:TODO FOUNDATION_EXPORT vs extern ??
 FOUNDATION_EXPORT NSString * const AFNetworkingReachabilityDidChangeNotification;
 FOUNDATION_EXPORT NSString * const AFNetworkingReachabilityNotificationStatusItem;
 
