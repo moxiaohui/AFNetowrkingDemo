@@ -23,9 +23,9 @@
 #import <Security/Security.h>
 
 typedef NS_ENUM(NSUInteger, AFSSLPinningMode) {
-    AFSSLPinningModeNone, //mo: 在系统的信任的证书列表中对服务端返回的证书进行验证
-    AFSSLPinningModePublicKey, //mo: 客户端需要有证书, 代表会对服务器返回的证书中的PublicKey(公钥)进行验证
-    AFSSLPinningModeCertificate, //mo: 客户端需要有证书, 先验证证书域名/有效期等信息，然后验证服务端返回的证书和本地的是否一致
+    AFSSLPinningModeNone, //mo: 只验证iOS系统内置的证书
+    AFSSLPinningModePublicKey, //mo: 验证服务下发的证书(与本地证书)，仅对比公钥
+    AFSSLPinningModeCertificate, //mo: 验证服务下发的证书(与本地证书)，会先验证域名和有效期等信息
 };
 
 /**

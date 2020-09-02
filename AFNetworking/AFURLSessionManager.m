@@ -166,12 +166,14 @@ static const void * const AuthenticationChallengeErrorKey = &AuthenticationChall
               task:(NSURLSessionTask *)task
 didCompleteWithError:(NSError *)error {
     error = objc_getAssociatedObject(task, AuthenticationChallengeErrorKey) ?: error;
+    //mo: 取出 AFURLSessionManager
     __strong AFURLSessionManager *manager = self.manager;
     __block id responseObject = nil;
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
     userInfo[AFNetworkingTaskDidCompleteResponseSerializerKey] = manager.responseSerializer;
 
     //Performance Improvement from #2672
+    //mo: 当请求完成后释放内存
     NSData *data = nil;
     if (self.mutableData) {
         data = [self.mutableData copy];
@@ -192,16 +194,19 @@ didCompleteWithError:(NSError *)error {
     }
     if (error) {
         userInfo[AFNetworkingTaskDidCompleteErrorKey] = error;
+        //mo: 异步添加到GCD任务组，如果没有指定会默认生成一个，回调队列如果没有指定会默认为主队列
         dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), manager.completionQueue ?: dispatch_get_main_queue(), ^{
             if (self.completionHandler) {
                 self.completionHandler(task.response, responseObject, error);
             }
+            //mo: 在主队列中发送AFNetworkingTaskDidCompleteNotification通知
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[NSNotificationCenter defaultCenter] postNotificationName:AFNetworkingTaskDidCompleteNotification object:task userInfo:userInfo];
             });
         });
     } else {
         //mo: 如果请求成功，则在一个 AF 的并行 queue 中，去做数据解析等后续操作
+        //mo: 使用并行队列对响应进行处理，提升解析效率
         dispatch_async(url_session_manager_processing_queue(), ^{
             NSError *serializationError = nil;
             responseObject = [manager.responseSerializer responseObjectForResponse:task.response data:data error:&serializationError];
@@ -214,10 +219,12 @@ didCompleteWithError:(NSError *)error {
             if (serializationError) {
                 userInfo[AFNetworkingTaskDidCompleteErrorKey] = serializationError;
             }
+            //mo: 处理完成后还是GCD统一处理
             dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), manager.completionQueue ?: dispatch_get_main_queue(), ^{
                 if (self.completionHandler) {
                     self.completionHandler(task.response, responseObject, serializationError);
                 }
+                //mo: 发出通知
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [[NSNotificationCenter defaultCenter] postNotificationName:AFNetworkingTaskDidCompleteNotification object:task userInfo:userInfo];
                 });
@@ -494,6 +501,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return [NSString stringWithFormat:@"%p", self];
 }
 
+#pragma mark - mo: 在监听到状态变化时向外部发出通知，方便外部处理
 - (void)taskDidResume:(NSNotification *)notification {
     NSURLSessionTask *task = notification.object;
     if ([task respondsToSelector:@selector(taskDescription)]) {
@@ -530,6 +538,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
             forTask:(NSURLSessionTask *)task {
     NSParameterAssert(task);
     NSParameterAssert(delegate);
+    //mo: 由于对字典的操作不是线程安全的，所以使用 NSLock 加锁
     [self.lock lock];
     self.mutableTaskDelegatesKeyedByTaskIdentifier[@(task.taskIdentifier)] = delegate;
     [self addNotificationObserverForTask:task];
@@ -540,10 +549,12 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
                 uploadProgress:(nullable void (^)(NSProgress *uploadProgress)) uploadProgressBlock
               downloadProgress:(nullable void (^)(NSProgress *downloadProgress)) downloadProgressBlock
              completionHandler:(void (^)(NSURLResponse *response, id responseObject, NSError *error))completionHandler {
+    //mo: 初始化代理对象，整个任务的进度和回调由代理负责管理
     AFURLSessionManagerTaskDelegate *delegate = [[AFURLSessionManagerTaskDelegate alloc] initWithTask:dataTask];
     delegate.manager = self;
     delegate.completionHandler = completionHandler;
     dataTask.taskDescription = self.taskDescriptionForSessionTasks;
+    //mo: 将代理与对象关联，存进Map
     [self setDelegate:delegate forTask:dataTask];
     delegate.uploadProgressBlock = uploadProgressBlock;
     delegate.downloadProgressBlock = downloadProgressBlock;
@@ -634,7 +645,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     _responseSerializer = responseSerializer;
 }
 
-#pragma mark -
+#pragma mark - mo: 添加监听
 - (void)addNotificationObserverForTask:(NSURLSessionTask *)task {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidResume:) name:AFNSURLSessionTaskDidResumeNotification object:task];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidSuspend:) name:AFNSURLSessionTaskDidSuspendNotification object:task];
