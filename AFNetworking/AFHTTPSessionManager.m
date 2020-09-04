@@ -63,44 +63,35 @@
     return [self initWithBaseURL:nil sessionConfiguration:configuration];
 }
 
-- (instancetype)initWithBaseURL:(NSURL *)url
-           sessionConfiguration:(NSURLSessionConfiguration *)configuration
-{
+#pragma mark - mo: `AFHTTPSessionManager`最终的初始化方法
+- (instancetype)initWithBaseURL:(NSURL *)url sessionConfiguration:(NSURLSessionConfiguration *)configuration {
     self = [super initWithSessionConfiguration:configuration];
     if (!self) {
         return nil;
     }
-
     // Ensure terminal slash for baseURL path, so that NSURL +URLWithString:relativeToURL: works as expected
     //mo: 确保`url`后面以`/`结尾, 如果不是会加上
     if ([[url path] length] > 0 && ![[url absoluteString] hasSuffix:@"/"]) {
         url = [url URLByAppendingPathComponent:@""];
     }
-
     self.baseURL = url;
     //mo: 初始化`请求`和`响应`的序列化对象, 默认使用json作为响应序列化方式
     self.requestSerializer = [AFHTTPRequestSerializer serializer];
     self.responseSerializer = [AFJSONResponseSerializer serializer];
-
     return self;
 }
 
-#pragma mark -
-
+#pragma mark - mo: Setter
 - (void)setRequestSerializer:(AFHTTPRequestSerializer <AFURLRequestSerialization> *)requestSerializer {
     NSParameterAssert(requestSerializer);
-
     _requestSerializer = requestSerializer;
 }
-
 - (void)setResponseSerializer:(AFHTTPResponseSerializer <AFURLResponseSerialization> *)responseSerializer {
     NSParameterAssert(responseSerializer);
-
     [super setResponseSerializer:responseSerializer];
 }
 
-@dynamic securityPolicy;
-
+@dynamic securityPolicy; //mo: 不需要动态生成setter getter
 - (void)setSecurityPolicy:(AFSecurityPolicy *)securityPolicy {
     if (securityPolicy.SSLPinningMode != AFSSLPinningModeNone && ![self.baseURL.scheme isEqualToString:@"https"]) {
         NSString *pinningMode = @"Unknown Pinning Mode";
@@ -112,20 +103,16 @@
         NSString *reason = [NSString stringWithFormat:@"A security policy configured with `%@` can only be applied on a manager with a secure base URL (i.e. https)", pinningMode];
         @throw [NSException exceptionWithName:@"Invalid Security Policy" reason:reason userInfo:nil];
     }
-
     [super setSecurityPolicy:securityPolicy];
 }
 
-#pragma mark -
-
+#pragma mark - mo: 各种网络请求方法
 - (NSURLSessionDataTask *)GET:(NSString *)URLString
                    parameters:(nullable id)parameters
                       headers:(nullable NSDictionary <NSString *, NSString *> *)headers
                      progress:(nullable void (^)(NSProgress * _Nonnull))downloadProgress
                       success:(nullable void (^)(NSURLSessionDataTask * _Nonnull, id _Nullable))success
-                      failure:(nullable void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure
-{
-    
+                      failure:(nullable void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"GET"
                                                         URLString:URLString
                                                        parameters:parameters
@@ -134,50 +121,38 @@
                                                  downloadProgress:downloadProgress
                                                           success:success
                                                           failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
-
 - (NSURLSessionDataTask *)HEAD:(NSString *)URLString
                     parameters:(nullable id)parameters
                        headers:(nullable NSDictionary<NSString *,NSString *> *)headers
                        success:(nullable void (^)(NSURLSessionDataTask * _Nonnull))success
-                       failure:(nullable void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure
-{
+                       failure:(nullable void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"HEAD" URLString:URLString parameters:parameters headers:headers uploadProgress:nil downloadProgress:nil success:^(NSURLSessionDataTask *task, __unused id responseObject) {
         if (success) {
             success(task);
         }
     } failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
-
 - (nullable NSURLSessionDataTask *)POST:(NSString *)URLString
                              parameters:(nullable id)parameters
                                 headers:(nullable NSDictionary <NSString *, NSString *> *)headers
                                progress:(nullable void (^)(NSProgress *uploadProgress))uploadProgress
                                 success:(nullable void (^)(NSURLSessionDataTask *task, id _Nullable responseObject))success
-                                failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError *error))failure
-{
+                                failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError *error))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"POST" URLString:URLString parameters:parameters headers:headers uploadProgress:uploadProgress downloadProgress:nil success:success failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
-
 - (NSURLSessionDataTask *)POST:(NSString *)URLString
                     parameters:(nullable id)parameters
                        headers:(nullable NSDictionary<NSString *,NSString *> *)headers
      constructingBodyWithBlock:(nullable void (^)(id<AFMultipartFormData> _Nonnull))block
                       progress:(nullable void (^)(NSProgress * _Nonnull))uploadProgress
-                       success:(nullable void (^)(NSURLSessionDataTask * _Nonnull, id _Nullable))success failure:(void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure
-{
+                       success:(nullable void (^)(NSURLSessionDataTask * _Nonnull, id _Nullable))success failure:(void (^)(NSURLSessionDataTask * _Nullable, NSError * _Nonnull))failure {
     NSError *serializationError = nil;
     NSMutableURLRequest *request = [self.requestSerializer multipartFormRequestWithMethod:@"POST" URLString:[[NSURL URLWithString:URLString relativeToURL:self.baseURL] absoluteString] parameters:parameters constructingBodyWithBlock:block error:&serializationError];
     for (NSString *headerField in headers.keyEnumerator) {
@@ -189,10 +164,8 @@
                 failure(nil, serializationError);
             });
         }
-        
         return nil;
     }
-    
     __block NSURLSessionDataTask *task = [self uploadTaskWithStreamedRequest:request progress:uploadProgress completionHandler:^(NSURLResponse * __unused response, id responseObject, NSError *error) {
         if (error) {
             if (failure) {
@@ -204,52 +177,38 @@
             }
         }
     }];
-    
     [task resume];
-    
     return task;
 }
-
 - (NSURLSessionDataTask *)PUT:(NSString *)URLString
                    parameters:(nullable id)parameters
                       headers:(nullable NSDictionary<NSString *,NSString *> *)headers
                       success:(nullable void (^)(NSURLSessionDataTask *task, id responseObject))success
-                      failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure
-{
+                      failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"PUT" URLString:URLString parameters:parameters headers:headers uploadProgress:nil downloadProgress:nil success:success failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
-
 - (NSURLSessionDataTask *)PATCH:(NSString *)URLString
                      parameters:(nullable id)parameters
                         headers:(nullable NSDictionary<NSString *,NSString *> *)headers
                         success:(nullable void (^)(NSURLSessionDataTask *task, id responseObject))success
-                        failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure
-{
+                        failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"PATCH" URLString:URLString parameters:parameters headers:headers uploadProgress:nil downloadProgress:nil success:success failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
-
 - (NSURLSessionDataTask *)DELETE:(NSString *)URLString
                       parameters:(nullable id)parameters
                          headers:(nullable NSDictionary<NSString *,NSString *> *)headers
                          success:(nullable void (^)(NSURLSessionDataTask *task, id responseObject))success
-                         failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure
-{
+                         failure:(nullable void (^)(NSURLSessionDataTask *task, NSError *error))failure {
     NSURLSessionDataTask *dataTask = [self dataTaskWithHTTPMethod:@"DELETE" URLString:URLString parameters:parameters headers:headers uploadProgress:nil downloadProgress:nil success:success failure:failure];
-    
     [dataTask resume];
-    
     return dataTask;
 }
 
-#pragma mark - mo: 初始化`URLSessionDataTask`
+#pragma mark - mo: 初始化`URLSessionDataTask` (各个请求都会调用的)
 - (NSURLSessionDataTask *)dataTaskWithHTTPMethod:(NSString *)method
                                        URLString:(NSString *)URLString
                                       parameters:(nullable id)parameters
@@ -257,12 +216,13 @@
                                   uploadProgress:(nullable void (^)(NSProgress *uploadProgress)) uploadProgress
                                 downloadProgress:(nullable void (^)(NSProgress *downloadProgress)) downloadProgress
                                          success:(nullable void (^)(NSURLSessionDataTask *task, id _Nullable responseObject))success
-                                         failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError *error))failure
-{
+                                         failure:(nullable void (^)(NSURLSessionDataTask * _Nullable task, NSError *error))failure {
     NSError *serializationError = nil;
-    //mo: 运用`requestSerializer`请求序列化对象初始化`request`
-    NSMutableURLRequest *request = [self.requestSerializer requestWithMethod:method URLString:[[NSURL URLWithString:URLString relativeToURL:self.baseURL] absoluteString] parameters:parameters error:&serializationError];
-    
+    //mo: 调用`AFHttpRequestSerializer`的方法 -> `NSMutableURLRequest`
+    NSMutableURLRequest *request = [self.requestSerializer requestWithMethod:method
+                                                                   URLString:[[NSURL URLWithString:URLString relativeToURL:self.baseURL] absoluteString]
+                                                                  parameters:parameters
+                                                                       error:&serializationError];
     //mo: 用`keyEnumerator`遍历keys, 此时不可更改字典 (还有个objectEnumerator可以遍历value)
     for (NSString *headerField in headers.keyEnumerator) {
         [request setValue:headers[headerField] forHTTPHeaderField:headerField];
@@ -273,10 +233,9 @@
                 failure(nil, serializationError);
             });
         }
-
         return nil;
     }
-
+    //mo: 这个dataTask需要回调给外部, 所以需要__block修饰
     __block NSURLSessionDataTask *dataTask = nil;
     dataTask = [self dataTaskWithRequest:request
                           uploadProgress:uploadProgress
@@ -292,22 +251,18 @@
             }
         }
     }];
-
     return dataTask;
 }
 
 #pragma mark - NSObject
-
 - (NSString *)description {
     return [NSString stringWithFormat:@"<%@: %p, baseURL: %@, session: %@, operationQueue: %@>", NSStringFromClass([self class]), self, [self.baseURL absoluteString], self.session, self.operationQueue];
 }
 
 #pragma mark - NSSecureCoding
-
 + (BOOL)supportsSecureCoding {
     return YES;
 }
-
 - (instancetype)initWithCoder:(NSCoder *)decoder {
     NSURL *baseURL = [decoder decodeObjectOfClass:[NSURL class] forKey:NSStringFromSelector(@selector(baseURL))];
     NSURLSessionConfiguration *configuration = [decoder decodeObjectOfClass:[NSURLSessionConfiguration class] forKey:@"sessionConfiguration"];
@@ -317,25 +272,20 @@
             configuration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:configurationIdentifier];
         }
     }
-
     self = [self initWithBaseURL:baseURL sessionConfiguration:configuration];
     if (!self) {
         return nil;
     }
-
     self.requestSerializer = [decoder decodeObjectOfClass:[AFHTTPRequestSerializer class] forKey:NSStringFromSelector(@selector(requestSerializer))];
     self.responseSerializer = [decoder decodeObjectOfClass:[AFHTTPResponseSerializer class] forKey:NSStringFromSelector(@selector(responseSerializer))];
     AFSecurityPolicy *decodedPolicy = [decoder decodeObjectOfClass:[AFSecurityPolicy class] forKey:NSStringFromSelector(@selector(securityPolicy))];
     if (decodedPolicy) {
         self.securityPolicy = decodedPolicy;
     }
-
     return self;
 }
-
 - (void)encodeWithCoder:(NSCoder *)coder {
     [super encodeWithCoder:coder];
-
     [coder encodeObject:self.baseURL forKey:NSStringFromSelector(@selector(baseURL))];
     if ([self.session.configuration conformsToProtocol:@protocol(NSCoding)]) {
         [coder encodeObject:self.session.configuration forKey:@"sessionConfiguration"];
@@ -348,10 +298,8 @@
 }
 
 #pragma mark - NSCopying
-
 - (instancetype)copyWithZone:(NSZone *)zone {
     AFHTTPSessionManager *HTTPClient = [[[self class] allocWithZone:zone] initWithBaseURL:self.baseURL sessionConfiguration:self.session.configuration];
-
     HTTPClient.requestSerializer = [self.requestSerializer copyWithZone:zone];
     HTTPClient.responseSerializer = [self.responseSerializer copyWithZone:zone];
     HTTPClient.securityPolicy = [self.securityPolicy copyWithZone:zone];

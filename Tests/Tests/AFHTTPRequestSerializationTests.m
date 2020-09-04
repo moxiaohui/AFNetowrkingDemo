@@ -45,9 +45,7 @@
 @property (nonatomic, assign) BOOL hasFinalBoundary;
 @property (readonly, nonatomic, assign, getter = hasBytesAvailable) BOOL bytesAvailable;
 @property (readonly, nonatomic, assign) NSUInteger contentLength;
-
-- (NSInteger)read:(uint8_t *)buffer
-        maxLength:(NSUInteger)length;
+- (NSInteger)read:(uint8_t *)buffer maxLength:(NSUInteger)length;
 @end
 
 #pragma mark -

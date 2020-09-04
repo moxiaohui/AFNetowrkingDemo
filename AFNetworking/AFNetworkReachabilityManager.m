@@ -191,11 +191,9 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
 - (BOOL)isReachable {
     return [self isReachableViaWWAN] || [self isReachableViaWiFi];
 }
-
 - (BOOL)isReachableViaWWAN {
     return self.networkReachabilityStatus == AFNetworkReachabilityStatusReachableViaWWAN;
 }
-
 - (BOOL)isReachableViaWiFi {
     return self.networkReachabilityStatus == AFNetworkReachabilityStatusReachableViaWiFi;
 }
@@ -203,11 +201,9 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
 #pragma mark - mo: 开始监控
 - (void)startMonitoring {
     [self stopMonitoring];
-
     if (!self.networkReachability) {
         return;
     }
-
     __weak __typeof(self)weakSelf = self;
     //mo: 处理网络可访问性状态改变回调
     AFNetworkReachabilityStatusCallback callback = ^(AFNetworkReachabilityStatus status) {
@@ -217,13 +213,10 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
         if (strongSelf.networkReachabilityStatusBlock) {
             strongSelf.networkReachabilityStatusBlock(status); //mo: 如果此block执行到一半时self释放, 多半情况下会crash !!!
         }
-        
         return strongSelf; //mo:TODO why? 仅仅是为了通知里的object么?
     };
-
     //mo: 包含用户指定的数据 和 SCNetworkReachability回调
     SCNetworkReachabilityContext context = {0, (__bridge void *)callback, AFNetworkReachabilityRetainCallback, AFNetworkReachabilityReleaseCallback, NULL};
-    
     /* mo: SCNetworkReachabilitySetCallback
      target: 一个网络引用, 关联地址和名称 去检测可访问性
      callout: 当target的可访问性改变时, 会触发
@@ -233,7 +226,6 @@ static void AFNetworkReachabilityReleaseCallback(const void *info) {
     SCNetworkReachabilitySetCallback(self.networkReachability, AFNetworkReachabilityCallback, &context);
     //mo: 给`networkReachability`设置`runloop`和`mode`
     SCNetworkReachabilityScheduleWithRunLoop(self.networkReachability, CFRunLoopGetMain(), kCFRunLoopCommonModes);
-
     //mo: dispatch_get_global_queue优先级 high default low background
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0),^{
         SCNetworkReachabilityFlags flags;

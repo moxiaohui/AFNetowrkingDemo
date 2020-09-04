@@ -37,6 +37,7 @@ FOUNDATION_EXPORT id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJ
 @protocol AFURLResponseSerialization <NSObject, NSSecureCoding, NSCopying>
 
 /**
+ mo: 根据data和响应创建response对象
  The response object decoded from the data associated with a specified response.
 
  @param response The response to be processed.
@@ -94,9 +95,7 @@ FOUNDATION_EXPORT id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJ
 
  @return `YES` if the response is valid, otherwise `NO`.
  */
-- (BOOL)validateResponse:(nullable NSHTTPURLResponse *)response
-                    data:(nullable NSData *)data
-                   error:(NSError * _Nullable __autoreleasing *)error;
+- (BOOL)validateResponse:(nullable NSHTTPURLResponse *)response data:(nullable NSData *)data error:(NSError * _Nullable __autoreleasing *)error;
 
 @end
 
@@ -119,6 +118,9 @@ FOUNDATION_EXPORT id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJ
 - (instancetype)init;
 
 /**
+ mo: 读取响应JSON数据 和 创建基础对象 的选项
+ NSJSONReadingMutableContainers 将数组和字典创建为可变对象
+ NSJSONReadingMutableLeaves 将JSON对象图中的叶字符串创建为NSMutableString的实例
  Options for reading the response JSON data and creating the Foundation objects. For possible values, see the `NSJSONSerialization` documentation section "NSJSONReadingOptions". `0` by default.
  */
 @property (nonatomic, assign) NSJSONReadingOptions readingOptions;

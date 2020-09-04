@@ -22,6 +22,7 @@
 #import "AFURLSessionManager.h"
 #import <objc/runtime.h>
 
+#pragma mark - mo: 请求进度并行 单例队列
 static dispatch_queue_t url_session_manager_processing_queue() {
     static dispatch_queue_t af_url_session_manager_processing_queue;
     static dispatch_once_t onceToken;
@@ -30,7 +31,7 @@ static dispatch_queue_t url_session_manager_processing_queue() {
     });
     return af_url_session_manager_processing_queue;
 }
-
+#pragma mark - mo: 请求完成 单例group
 static dispatch_group_t url_session_manager_completion_group() {
     static dispatch_group_t af_url_session_manager_completion_group;
     static dispatch_once_t onceToken;
@@ -39,14 +40,14 @@ static dispatch_group_t url_session_manager_completion_group() {
     });
     return af_url_session_manager_completion_group;
 }
-
+// mo: 通知Key
 NSString * const AFNetworkingTaskDidResumeNotification = @"com.alamofire.networking.task.resume";
 NSString * const AFNetworkingTaskDidCompleteNotification = @"com.alamofire.networking.task.complete";
 NSString * const AFNetworkingTaskDidSuspendNotification = @"com.alamofire.networking.task.suspend";
 NSString * const AFURLSessionDidInvalidateNotification = @"com.alamofire.networking.session.invalidate";
 NSString * const AFURLSessionDownloadTaskDidMoveFileSuccessfullyNotification = @"com.alamofire.networking.session.download.file-manager-succeed";
 NSString * const AFURLSessionDownloadTaskDidFailToMoveFileNotification = @"com.alamofire.networking.session.download.file-manager-error";
-
+// mo: userInfo key
 NSString * const AFNetworkingTaskDidCompleteSerializedResponseKey = @"com.alamofire.networking.task.complete.serializedresponse";
 NSString * const AFNetworkingTaskDidCompleteResponseSerializerKey = @"com.alamofire.networking.task.complete.responseserializer";
 NSString * const AFNetworkingTaskDidCompleteResponseDataKey = @"com.alamofire.networking.complete.finish.responsedata";
@@ -55,7 +56,7 @@ NSString * const AFNetworkingTaskDidCompleteAssetPathKey = @"com.alamofire.netwo
 NSString * const AFNetworkingTaskDidCompleteSessionTaskMetrics = @"com.alamofire.networking.complete.sessiontaskmetrics";
 
 static NSString * const AFURLSessionManagerLockName = @"com.alamofire.networking.session.manager.lock";
-
+// mo: 一些block的声明
 typedef void (^AFURLSessionDidBecomeInvalidBlock)(NSURLSession *session, NSError *error);
 typedef NSURLSessionAuthChallengeDisposition (^AFURLSessionDidReceiveAuthenticationChallengeBlock)(NSURLSession *session, NSURLAuthenticationChallenge *challenge, NSURLCredential * __autoreleasing *credential);
 
@@ -83,26 +84,23 @@ typedef void (^AFURLSessionTaskProgressBlock)(NSProgress *);
 
 typedef void (^AFURLSessionTaskCompletionHandler)(NSURLResponse *response, id responseObject, NSError *error);
 
-#pragma mark -
-
+#pragma mark - mo: AFURLSessionManagerTaskDelegate
 @interface AFURLSessionManagerTaskDelegate : NSObject <NSURLSessionTaskDelegate, NSURLSessionDataDelegate, NSURLSessionDownloadDelegate>
 - (instancetype)initWithTask:(NSURLSessionTask *)task;
 @property (nonatomic, weak) AFURLSessionManager *manager;
-@property (nonatomic, strong) NSMutableData *mutableData;
-@property (nonatomic, strong) NSProgress *uploadProgress;
-@property (nonatomic, strong) NSProgress *downloadProgress;
+@property (nonatomic, strong) NSMutableData *mutableData; //mo: 保存服务器返回的数据
+@property (nonatomic, strong) NSProgress *uploadProgress; //mo: 上传进度
+@property (nonatomic, strong) NSProgress *downloadProgress; //mo: 下载进度
 @property (nonatomic, copy) NSURL *downloadFileURL;
 #if AF_CAN_INCLUDE_SESSION_TASK_METRICS
 @property (nonatomic, strong) NSURLSessionTaskMetrics *sessionTaskMetrics AF_API_AVAILABLE(ios(10), macosx(10.12), watchos(3), tvos(10));
 #endif
-@property (nonatomic, copy) AFURLSessionDownloadTaskDidFinishDownloadingBlock downloadTaskDidFinishDownloading;
-@property (nonatomic, copy) AFURLSessionTaskProgressBlock uploadProgressBlock;
-@property (nonatomic, copy) AFURLSessionTaskProgressBlock downloadProgressBlock;
-@property (nonatomic, copy) AFURLSessionTaskCompletionHandler completionHandler;
+@property (nonatomic, copy) AFURLSessionDownloadTaskDidFinishDownloadingBlock downloadTaskDidFinishDownloading; //mo: 下载完成回调
+@property (nonatomic, copy) AFURLSessionTaskProgressBlock uploadProgressBlock; //mo: 上传进度回调
+@property (nonatomic, copy) AFURLSessionTaskProgressBlock downloadProgressBlock; //mo: 下载进度回调
+@property (nonatomic, copy) AFURLSessionTaskCompletionHandler completionHandler; //mo: 完成回调
 @end
-
 @implementation AFURLSessionManagerTaskDelegate
-
 - (instancetype)initWithTask:(NSURLSessionTask *)task {
     self = [super init];
     if (!self) {
@@ -112,15 +110,16 @@ typedef void (^AFURLSessionTaskCompletionHandler)(NSURLResponse *response, id re
     _uploadProgress = [[NSProgress alloc] initWithParent:nil userInfo:nil];
     _downloadProgress = [[NSProgress alloc] initWithParent:nil userInfo:nil];
     __weak __typeof__(task) weakTask = task;
+    //mo: 初始化 上传 下载 进度
     for (NSProgress *progress in @[ _uploadProgress, _downloadProgress ]) {
         progress.totalUnitCount = NSURLSessionTransferSizeUnknown;
         progress.cancellable = YES;
         progress.cancellationHandler = ^{
-            [weakTask cancel];
+            [weakTask cancel]; //mo: 控制stask 取消
         };
         progress.pausable = YES;
         progress.pausingHandler = ^{
-            [weakTask suspend];
+            [weakTask suspend]; //mo: 控制stask 暂停
         };
 #if AF_CAN_USE_AT_AVAILABLE
         if (@available(macOS 10.11, *))
@@ -129,9 +128,10 @@ typedef void (^AFURLSessionTaskCompletionHandler)(NSURLResponse *response, id re
 #endif
         {
             progress.resumingHandler = ^{
-                [weakTask resume];
+                [weakTask resume]; //mo: 控制stask 恢复
             };
         }
+        //mo: 监听部分完成回调
         [progress addObserver:self
                    forKeyPath:NSStringFromSelector(@selector(fractionCompleted))
                       options:NSKeyValueObservingOptionNew
@@ -149,31 +149,29 @@ typedef void (^AFURLSessionTaskCompletionHandler)(NSURLResponse *response, id re
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSString *,id> *)change context:(void *)context {
    if ([object isEqual:self.downloadProgress]) {
        if (self.downloadProgressBlock) {
-           self.downloadProgressBlock(object);
+           self.downloadProgressBlock(object); //mo: fractionCompleted
        }
    } else if ([object isEqual:self.uploadProgress]) {
        if (self.uploadProgressBlock) {
-           self.uploadProgressBlock(object);
+           self.uploadProgressBlock(object); //mo: fractionCompleted
        }
    }
 }
 
+//mo: TODO 这个key 咋回事???
 static const void * const AuthenticationChallengeErrorKey = &AuthenticationChallengeErrorKey;
 
 #pragma mark - NSURLSessionTaskDelegate
-
-- (void)URLSession:(__unused NSURLSession *)session
-              task:(NSURLSessionTask *)task
-didCompleteWithError:(NSError *)error {
+- (void)URLSession:(__unused NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     error = objc_getAssociatedObject(task, AuthenticationChallengeErrorKey) ?: error;
-    //mo: 取出 AFURLSessionManager
     __strong AFURLSessionManager *manager = self.manager;
     __block id responseObject = nil;
+    //mo: 创建userInfo
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
-    userInfo[AFNetworkingTaskDidCompleteResponseSerializerKey] = manager.responseSerializer;
+    userInfo[AFNetworkingTaskDidCompleteResponseSerializerKey] = manager.responseSerializer; //mo: 设置请求响应
 
     //Performance Improvement from #2672
-    //mo: 当请求完成后释放内存
+    //mo: 当请求完成后释放内存 ??
     NSData *data = nil;
     if (self.mutableData) {
         data = [self.mutableData copy];
@@ -188,26 +186,25 @@ didCompleteWithError:(NSError *)error {
     }
 #endif
     if (self.downloadFileURL) {
-        userInfo[AFNetworkingTaskDidCompleteAssetPathKey] = self.downloadFileURL;
+        userInfo[AFNetworkingTaskDidCompleteAssetPathKey] = self.downloadFileURL; //mo: 设置下载文件URL
     } else if (data) {
-        userInfo[AFNetworkingTaskDidCompleteResponseDataKey] = data;
+        userInfo[AFNetworkingTaskDidCompleteResponseDataKey] = data; //mo: 设置响应Data
     }
-    if (error) {
-        userInfo[AFNetworkingTaskDidCompleteErrorKey] = error;
-        //mo: 异步添加到GCD任务组，如果没有指定会默认生成一个，回调队列如果没有指定会默认为主队列
-        dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), manager.completionQueue ?: dispatch_get_main_queue(), ^{
+    if (error) { //mo: 请求失败
+        userInfo[AFNetworkingTaskDidCompleteErrorKey] = error; //mo: 设置error
+        //mo: 异步添加到group的queue中
+        dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), //mo: 没有会使用-单例group
+                             manager.completionQueue ?: dispatch_get_main_queue(), ^{ //mo: 没有会用-主线程
             if (self.completionHandler) {
                 self.completionHandler(task.response, responseObject, error);
             }
-            //mo: 在主队列中发送AFNetworkingTaskDidCompleteNotification通知
+            //mo: 异步添加到主线程中-完成通知
             dispatch_async(dispatch_get_main_queue(), ^{
                 [[NSNotificationCenter defaultCenter] postNotificationName:AFNetworkingTaskDidCompleteNotification object:task userInfo:userInfo];
             });
         });
-    } else {
-        //mo: 如果请求成功，则在一个 AF 的并行 queue 中，去做数据解析等后续操作
-        //mo: 使用并行队列对响应进行处理，提升解析效率
-        dispatch_async(url_session_manager_processing_queue(), ^{
+    } else { //mo: 请求成功
+        dispatch_async(url_session_manager_processing_queue(), ^{ //mo: 使用并行队列对响应进行-解析和后续处理，提升解析效率
             NSError *serializationError = nil;
             responseObject = [manager.responseSerializer responseObjectForResponse:task.response data:data error:&serializationError];
             if (self.downloadFileURL) {
@@ -409,12 +406,12 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 }
 @end
 
-#pragma mark -
+#pragma mark - mo: AFURLSessionManager
 @interface AFURLSessionManager ()
 @property (readwrite, nonatomic, strong) NSURLSessionConfiguration *sessionConfiguration;
 @property (readwrite, nonatomic, strong) NSOperationQueue *operationQueue;
 @property (readwrite, nonatomic, strong) NSURLSession *session;
-@property (readwrite, nonatomic, strong) NSMutableDictionary *mutableTaskDelegatesKeyedByTaskIdentifier;
+@property (readwrite, nonatomic, strong) NSMutableDictionary *mutableTaskDelegatesKeyedByTaskIdentifier; //mo: dic{taskId-delegate}
 @property (readonly, nonatomic, copy) NSString *taskDescriptionForSessionTasks;
 @property (readwrite, nonatomic, strong) NSLock *lock;
 @property (readwrite, nonatomic, copy) AFURLSessionDidBecomeInvalidBlock sessionDidBecomeInvalid;
@@ -467,8 +464,8 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     //mo: 初始化锁
     self.lock = [[NSLock alloc] init];
     self.lock.name = AFURLSessionManagerLockName;
-    //mo: 后台进入时重新写入代理 ???
-    [self.session getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) {
+    //mo: 遍历session中所有`数据task/上传task/下载task`设置 代理 回调
+    [self.session getTasksWithCompletionHandler:^(NSArray *dataTasks, NSArray *uploadTasks, NSArray *downloadTasks) { //mo: 跟delegate一个线程
         for (NSURLSessionDataTask *task in dataTasks) {
             [self addDelegateForDataTask:task uploadProgress:nil downloadProgress:nil completionHandler:nil];
         }
@@ -496,23 +493,21 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return _session;
 }
 
-#pragma mark -
+#pragma mark - mo: 实例地址
 - (NSString *)taskDescriptionForSessionTasks {
     return [NSString stringWithFormat:@"%p", self];
 }
-
-#pragma mark - mo: 在监听到状态变化时向外部发出通知，方便外部处理
+#pragma mark - mo: 暂停/恢复 回调, 向外部发出通知，方便外部处理
 - (void)taskDidResume:(NSNotification *)notification {
     NSURLSessionTask *task = notification.object;
-    if ([task respondsToSelector:@selector(taskDescription)]) {
-        if ([task.taskDescription isEqualToString:self.taskDescriptionForSessionTasks]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
+    if ([task respondsToSelector:@selector(taskDescription)]) { //mo: 判断task是否实现taskDescription方法
+        if ([task.taskDescription isEqualToString:self.taskDescriptionForSessionTasks]) { //mo: task跟当前self是同一个实例对象
+            dispatch_async(dispatch_get_main_queue(), ^{ //mo: 异步存入主线程队列中
                 [[NSNotificationCenter defaultCenter] postNotificationName:AFNetworkingTaskDidResumeNotification object:task];
             });
         }
     }
 }
-
 - (void)taskDidSuspend:(NSNotification *)notification {
     NSURLSessionTask *task = notification.object;
     if ([task respondsToSelector:@selector(taskDescription)]) {
@@ -524,27 +519,25 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     }
 }
 
-#pragma mark -
+#pragma mark - mo: 代理字典存取
+//mo: 字典的操作不是线程安全的, 所以用`NSLock`加锁
 - (AFURLSessionManagerTaskDelegate *)delegateForTask:(NSURLSessionTask *)task {
     NSParameterAssert(task);
     AFURLSessionManagerTaskDelegate *delegate = nil;
-    [self.lock lock];
+    [self.lock lock]; //mo: 读取加锁
     delegate = self.mutableTaskDelegatesKeyedByTaskIdentifier[@(task.taskIdentifier)];
     [self.lock unlock];
     return delegate;
 }
-
-- (void)setDelegate:(AFURLSessionManagerTaskDelegate *)delegate
-            forTask:(NSURLSessionTask *)task {
+- (void)setDelegate:(AFURLSessionManagerTaskDelegate *)delegate forTask:(NSURLSessionTask *)task {
     NSParameterAssert(task);
     NSParameterAssert(delegate);
-    //mo: 由于对字典的操作不是线程安全的，所以使用 NSLock 加锁
     [self.lock lock];
     self.mutableTaskDelegatesKeyedByTaskIdentifier[@(task.taskIdentifier)] = delegate;
-    [self addNotificationObserverForTask:task];
+    [self addNotificationObserverForTask:task]; //mo: 添加`暂停`和`恢复`监听, object-task
     [self.lock unlock];
 }
-
+#pragma mark - mo: 为task创建 代理和回调
 - (void)addDelegateForDataTask:(NSURLSessionDataTask *)dataTask
                 uploadProgress:(nullable void (^)(NSProgress *uploadProgress)) uploadProgressBlock
               downloadProgress:(nullable void (^)(NSProgress *downloadProgress)) downloadProgressBlock
@@ -559,7 +552,6 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     delegate.uploadProgressBlock = uploadProgressBlock;
     delegate.downloadProgressBlock = downloadProgressBlock;
 }
-
 - (void)addDelegateForUploadTask:(NSURLSessionUploadTask *)uploadTask
                         progress:(void (^)(NSProgress *uploadProgress)) uploadProgressBlock
                completionHandler:(void (^)(NSURLResponse *response, id responseObject, NSError *error))completionHandler {
@@ -570,7 +562,6 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     [self setDelegate:delegate forTask:uploadTask];
     delegate.uploadProgressBlock = uploadProgressBlock;
 }
-
 - (void)addDelegateForDownloadTask:(NSURLSessionDownloadTask *)downloadTask
                           progress:(void (^)(NSProgress *downloadProgress)) downloadProgressBlock
                        destination:(NSURL * (^)(NSURL *targetPath, NSURLResponse *response))destination
@@ -587,7 +578,6 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     [self setDelegate:delegate forTask:downloadTask];
     delegate.downloadProgressBlock = downloadProgressBlock;
 }
-
 - (void)removeDelegateForTask:(NSURLSessionTask *)task {
     NSParameterAssert(task);
     [self.lock lock];
@@ -596,7 +586,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     [self.lock unlock];
 }
 
-#pragma mark -
+#pragma mark - mo: 根据数组名返回session中的task数组
 - (NSArray *)tasksForKeyPath:(NSString *)keyPath {
     __block NSArray *tasks = nil;
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
@@ -608,11 +598,12 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
         } else if ([keyPath isEqualToString:NSStringFromSelector(@selector(downloadTasks))]) {
             tasks = downloadTasks;
         } else if ([keyPath isEqualToString:NSStringFromSelector(@selector(tasks))]) {
-            tasks = [@[dataTasks, uploadTasks, downloadTasks] valueForKeyPath:@"@unionOfArrays.self"];
+            tasks = [@[dataTasks, uploadTasks, downloadTasks] valueForKeyPath:@"@unionOfArrays.self"]; //mo: 合并数组, 不去重
         }
-        dispatch_semaphore_signal(semaphore);
+        dispatch_semaphore_signal(semaphore); //mo: semaphore + 1
     }];
-    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
+    dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER); //mo: semaphore=0: 阻塞; semaphore>0/timeout:往下执行
+    //mo: 也就是 等待block执行完, 再返回
     return tasks;
 }
 - (NSArray *)tasks {
@@ -627,7 +618,8 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 - (NSArray *)downloadTasks {
     return [self tasksForKeyPath:NSStringFromSelector(_cmd)];
 }
-#pragma mark -
+
+#pragma mark - mo: 使session无效, 可以 取消挂起 or 重置
 - (void)invalidateSessionCancelingTasks:(BOOL)cancelPendingTasks resetSession:(BOOL)resetSession {
     if (cancelPendingTasks) {
         [self.session invalidateAndCancel];
@@ -645,7 +637,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     _responseSerializer = responseSerializer;
 }
 
-#pragma mark - mo: 添加监听
+#pragma mark - mo: 添加 暂停和恢复 监听
 - (void)addNotificationObserverForTask:(NSURLSessionTask *)task {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidResume:) name:AFNSURLSessionTaskDidResumeNotification object:task];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(taskDidSuspend:) name:AFNSURLSessionTaskDidSuspendNotification object:task];
@@ -655,17 +647,18 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     [[NSNotificationCenter defaultCenter] removeObserver:self name:AFNSURLSessionTaskDidResumeNotification object:task];
 }
 
-#pragma mark -
+#pragma mark - mo: 根据request创建task, 封装了系统的初始化, 添加了一些自己的操作(关联代理+回调)
 - (NSURLSessionDataTask *)dataTaskWithRequest:(NSURLRequest *)request
                                uploadProgress:(nullable void (^)(NSProgress *uploadProgress)) uploadProgressBlock
                              downloadProgress:(nullable void (^)(NSProgress *downloadProgress)) downloadProgressBlock
                             completionHandler:(nullable void (^)(NSURLResponse *response, id _Nullable responseObject,  NSError * _Nullable error))completionHandler {
+    //mo: `NSURLSession`根据`NSURLRequest`创建`NSURLSessionDataTask`
     NSURLSessionDataTask *dataTask = [self.session dataTaskWithRequest:request];
+    //mo: 为task创建 代理和回调
     [self addDelegateForDataTask:dataTask uploadProgress:uploadProgressBlock downloadProgress:downloadProgressBlock completionHandler:completionHandler];
     return dataTask;
 }
-
-#pragma mark -
+//mo: 根据`request`和`fileURL`创建`uploadTask` (差不多同上)
 - (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
                                          fromFile:(NSURL *)fileURL
                                          progress:(void (^)(NSProgress *uploadProgress)) uploadProgressBlock
@@ -678,7 +671,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     }
     return uploadTask;
 }
-
+//mo: 根据`request`和`bodyData`创建`uploadTask` (差不多同上)
 - (NSURLSessionUploadTask *)uploadTaskWithRequest:(NSURLRequest *)request
                                          fromData:(NSData *)bodyData
                                          progress:(void (^)(NSProgress *uploadProgress)) uploadProgressBlock
@@ -687,7 +680,6 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     [self addDelegateForUploadTask:uploadTask progress:uploadProgressBlock completionHandler:completionHandler];
     return uploadTask;
 }
-
 - (NSURLSessionUploadTask *)uploadTaskWithStreamedRequest:(NSURLRequest *)request
                                                  progress:(void (^)(NSProgress *uploadProgress)) uploadProgressBlock
                                         completionHandler:(void (^)(NSURLResponse *response, id responseObject, NSError *error))completionHandler  {
@@ -715,7 +707,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return downloadTask;
 }
 
-#pragma mark -
+#pragma mark - mo: task -> delegate -> progress
 - (NSProgress *)uploadProgressForTask:(NSURLSessionTask *)task {
     return [[self delegateForTask:task] uploadProgress];
 }
@@ -723,7 +715,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return [[self delegateForTask:task] downloadProgress];
 }
 
-#pragma mark -
+#pragma mark - mo: 设置block
 - (void)setSessionDidBecomeInvalidBlock:(void (^)(NSURLSession *session, NSError *error))block {
     self.sessionDidBecomeInvalid = block;
 }
@@ -787,6 +779,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     return [NSString stringWithFormat:@"<%@: %p, session: %@, operationQueue: %@>", NSStringFromClass([self class]), self, self.session, self.operationQueue];
 }
 
+#pragma mark - mo: 判断一些代理方法是否实现时, 替换成判断block是否实现; 在方法里调用的是block, 即将代理方法转换成block包装出去供外部使用
 - (BOOL)respondsToSelector:(SEL)selector {
     if (selector == @selector(URLSession:didReceiveChallenge:completionHandler:)) {
         return self.sessionDidReceiveAuthenticationChallenge != nil;
@@ -806,17 +799,13 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
 }
 
 #pragma mark - NSURLSessionDelegate
-
 - (void)URLSession:(NSURLSession *)session didBecomeInvalidWithError:(NSError *)error {
     if (self.sessionDidBecomeInvalid) {
         self.sessionDidBecomeInvalid(session, error);
     }
     [[NSNotificationCenter defaultCenter] postNotificationName:AFURLSessionDidInvalidateNotification object:session];
 }
-
-- (void)URLSession:(NSURLSession *)session
-didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
- completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential *credential))completionHandler {
+- (void)URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential *credential))completionHandler {
     NSAssert(self.sessionDidReceiveAuthenticationChallenge != nil, @"`respondsToSelector:` implementation forces `URLSession:didReceiveChallenge:completionHandler:` to be called only if `self.sessionDidReceiveAuthenticationChallenge` is not nil");
     NSURLCredential *credential = nil;
     NSURLSessionAuthChallengeDisposition disposition = self.sessionDidReceiveAuthenticationChallenge(session, challenge, &credential);

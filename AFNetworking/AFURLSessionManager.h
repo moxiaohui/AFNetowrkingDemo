@@ -179,6 +179,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (instancetype)initWithSessionConfiguration:(nullable NSURLSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
 
 /**
+ mo: 使session无效, 可以 取消挂起 or 重置
  Invalidates the managed session, optionally canceling pending tasks and optionally resets given session.
  
  @param cancelPendingTasks  Whether or not to cancel pending tasks.

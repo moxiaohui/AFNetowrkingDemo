@@ -55,7 +55,6 @@ static id AFPublicKeyForCertificate(NSData *certificate) {
     //mo: 当条件返回false时, 跳转到 _out
     __Require_Quiet(allowedCertificate != NULL, _out);
     policy = SecPolicyCreateBasicX509(); //mo: X.509政策对象
-    
     //mo: __Require_noErr_Quiet: 如果出错, 则跳转到 _out
     /* 根据证书和政策创建一个信任管理对象
      certificates: 要认证的证书+你认为对证书有用的任何其他证书
@@ -71,7 +70,6 @@ static id AFPublicKeyForCertificate(NSData *certificate) {
 #pragma clang diagnostic pop
     //mo: 在`叶证书`求值后返回其公钥
     allowedPublicKey = (__bridge_transfer id)SecTrustCopyPublicKey(allowedTrust);
-
 _out:
     if (allowedTrust) {
         CFRelease(allowedTrust);
@@ -122,10 +120,8 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     NSMutableArray *trustChain = [NSMutableArray arrayWithCapacity:(NSUInteger)certificateCount];
     for (CFIndex i = 0; i < certificateCount; i++) {
         SecCertificateRef certificate = SecTrustGetCertificateAtIndex(serverTrust, i);
-
         SecCertificateRef someCertificates[] = {certificate};
         CFArrayRef certificates = CFArrayCreate(NULL, (const void **)someCertificates, 1, NULL);
-
         SecTrustRef trust;
         //mo: 根据给定的certificates和policy来生成一个trust对象
         __Require_noErr_Quiet(SecTrustCreateWithCertificates(certificates, policy, &trust), _out);
@@ -137,7 +133,6 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
 #pragma clang diagnostic pop
         //mo: 如果该trust符合X.509证书格式，那么先使用SecTrustCopyPublicKey获取到trust的公钥，再将此公钥添加到trustChain中
         [trustChain addObject:(__bridge_transfer id)SecTrustCopyPublicKey(trust)];
-
     _out:
         if (trust) {
             CFRelease(trust);
@@ -234,9 +229,7 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
         NSLog(@"In order to validate a domain name for self signed certificates, you MUST use pinning.");
         return NO;
     }
-
     NSMutableArray *policies = [NSMutableArray array];
-    
     if (self.validatesDomainName) { //mo: 是否需要验证domain
         //mo: 评估SSL证书链的策略对象
         // 使用SecPolicyCreateSSL函数创建验证策略
@@ -246,7 +239,6 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
         //mo: 如果不需要验证domain，就使用默认的BasicX509验证策略
         [policies addObject:(__bridge_transfer id)SecPolicyCreateBasicX509()];
     }
-
     //mo: 为serverTrust设置验证策略，即告诉客户端如何验证serverTrust
     SecTrustSetPolicies(serverTrust, (__bridge CFArrayRef)policies);
 
@@ -257,7 +249,6 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
         // 否则 需要验证 && 没有验证通过 则返回失败
         return NO;
     }
-
     switch (self.SSLPinningMode) {
         case AFSSLPinningModeCertificate: {
             NSMutableArray *pinnedCertificates = [NSMutableArray array];
@@ -270,11 +261,9 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
              anchorCertificates: 参考证书
              */
             SecTrustSetAnchorCertificates(serverTrust, (__bridge CFArrayRef)pinnedCertificates);
-
             if (!AFServerTrustIsValid(serverTrust)) {
                 return NO;
             }
-
             // obtain the chain after being validated, which *should* contain the pinned certificate in the last position (if it's the Root CA)
             //mo: 获取到 serverTrust 中证书链上的所有证书, 注意: 此处返回的证书链顺序是从叶节点到根节点
             NSArray *serverCertificates = AFCertificateTrustChainForServerTrust(serverTrust);
@@ -316,7 +305,6 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
 + (BOOL)supportsSecureCoding {
     return YES;
 }
-
 - (instancetype)initWithCoder:(NSCoder *)decoder {
     self = [self init];
     if (!self) {
@@ -328,7 +316,6 @@ static NSArray * AFPublicKeyTrustChainForServerTrust(SecTrustRef serverTrust) {
     self.pinnedCertificates = [decoder decodeObjectOfClass:[NSSet class] forKey:NSStringFromSelector(@selector(pinnedCertificates))];
     return self;
 }
-
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:[NSNumber numberWithUnsignedInteger:self.SSLPinningMode] forKey:NSStringFromSelector(@selector(SSLPinningMode))];
     [coder encodeBool:self.allowInvalidCertificates forKey:NSStringFromSelector(@selector(allowInvalidCertificates))];
