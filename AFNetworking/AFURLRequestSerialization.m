@@ -206,10 +206,10 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     self.requestHeaderModificationQueue = dispatch_queue_create("requestHeaderModificationQueue", DISPATCH_QUEUE_CONCURRENT);
 
     /* mo: 帮我们组装好了一些HTTP请求头
-     Content-Type: 请求参数类型
-     Accept-Language: 根据 [NSLocale preferredLanguages] 方法读取本地语言，告诉服务端自己能接受的语言。
-     User-Agent: app的boundId/ID/版本, 设备型号/系统/尺寸 等
-     Authorization: 提供 Basic Auth 认证接口，帮我们把用户名密码做 base64 编码后放入 HTTP 请求头。
+    Content-Type: 请求参数类型
+    Accept-Language: 根据 [NSLocale preferredLanguages] 方法读取本地语言，告诉服务端自己能接受的语言。
+    User-Agent: app的boundId/ID/版本, 设备型号/系统/尺寸 等
+    Authorization: 提供 Basic Auth 认证接口，帮我们把用户名密码做 base64 编码后放入 HTTP 请求头。
      */
     
     // Accept-Language HTTP Header; see http://www.w3.org/Protocols/rfc2616/rfc2616-sec14.html#sec14.4
