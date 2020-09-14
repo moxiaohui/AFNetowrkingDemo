@@ -123,8 +123,7 @@ NS_ASSUME_NONNULL_BEGIN
 
  @return The newly-initialized HTTP client
  */
-- (instancetype)initWithBaseURL:(nullable NSURL *)url
-           sessionConfiguration:(nullable NSURLSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
+- (instancetype)initWithBaseURL:(nullable NSURL *)url sessionConfiguration:(nullable NSURLSessionConfiguration *)configuration NS_DESIGNATED_INITIALIZER;
 
 ///---------------------------
 /// @name Making HTTP Requests

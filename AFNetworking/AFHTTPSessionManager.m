@@ -235,7 +235,7 @@
         }
         return nil;
     }
-    //mo: 这个dataTask需要回调给外部, 所以需要__block修饰
+    //mo: 这个dataTask需要回调给外部, 所以需要__block修饰 (父类)
     __block NSURLSessionDataTask *dataTask = nil;
     dataTask = [self dataTaskWithRequest:request
                           uploadProgress:uploadProgress

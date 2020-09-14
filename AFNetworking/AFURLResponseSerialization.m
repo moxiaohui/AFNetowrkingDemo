@@ -94,11 +94,15 @@ id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJSONReadingOptions 
     self.acceptableContentTypes = nil;
     return self;
 }
-#pragma mark - mo: 验证指定的响应和数据
+#pragma mark - mo: 验证响应和数据
 - (BOOL)validateResponse:(NSHTTPURLResponse *)response data:(NSData *)data error:(NSError * __autoreleasing *)error {
     BOOL responseIsValid = YES;
     NSError *validationError = nil;
     if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+        /* mo: 根据自身属性的设置 判断响应的`MIMEType`和`statusCode`是否合法
+         acceptableContentTypes - MIMEType
+         acceptableStatusCodes - statusCode
+         */
         if (self.acceptableContentTypes && ![self.acceptableContentTypes containsObject:[response MIMEType]] && !([response MIMEType] == nil && [data length] == 0)) {
             if ([data length] > 0 && [response URL]) {
                 NSMutableDictionary *mutableUserInfo;
@@ -182,8 +186,12 @@ id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJSONReadingOptions 
 
 #pragma mark - AFURLResponseSerialization
 - (id)responseObjectForResponse:(NSURLResponse *)response data:(NSData *)data error:(NSError *__autoreleasing *)error {
+    
     //mo: 第一步永远是校验数据合法性，这种编程习惯值得我们学习，实现功能的同时首先要考虑错误和非法输入
     if (![self validateResponse:(NSHTTPURLResponse *)response data:data error:error]) {
+        
+        //mo: 如果是 content type 的错误就直接返回，因为数据类型不符合要求
+        //mo: 如果是 status code 的错误就继续解析，因为错误信息有可能就在返回的数据中
         if (!error || AFErrorOrUnderlyingErrorHasCodeInDomain(*error, NSURLErrorCannotDecodeContentData, AFURLResponseSerializationErrorDomain)) {
             return nil;
         }
@@ -204,7 +212,7 @@ id AFJSONObjectByRemovingKeysWithNullValues(id JSONObject, NSJSONReadingOptions 
         }
         return nil;
     }
-    //mo: 移除json解析出来的null对象
+    //mo: 移除json解析出来的`NSNull`对象
     if (self.removesKeysWithNullValues) {
         return AFJSONObjectByRemovingKeysWithNullValues(responseObject, self.readingOptions);
     }
@@ -570,7 +578,7 @@ static UIImage * AFInflatedImageFromResponseWithDataAtScale(NSHTTPURLResponse *r
 }
 @end
 
-#pragma mark - mo: AFCompoundResponseSerializer
+#pragma mark - mo: AFCompoundResponseSerializer 组合响应模式
 @interface AFCompoundResponseSerializer ()
 @property (readwrite, nonatomic, copy) NSArray *responseSerializers;
 @end
@@ -580,11 +588,8 @@ static UIImage * AFInflatedImageFromResponseWithDataAtScale(NSHTTPURLResponse *r
     serializer.responseSerializers = responseSerializers;
     return serializer;
 }
-
 #pragma mark - AFURLResponseSerialization
-- (id)responseObjectForResponse:(NSURLResponse *)response
-                           data:(NSData *)data
-                          error:(NSError *__autoreleasing *)error {
+- (id)responseObjectForResponse:(NSURLResponse *)response data:(NSData *)data error:(NSError *__autoreleasing *)error {
     for (id <AFURLResponseSerialization> serializer in self.responseSerializers) {
         if (![serializer isKindOfClass:[AFHTTPResponseSerializer class]]) {
             continue;

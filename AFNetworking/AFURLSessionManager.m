@@ -192,7 +192,7 @@ static const void * const AuthenticationChallengeErrorKey = &AuthenticationChall
     }
     if (error) { //mo: 请求失败
         userInfo[AFNetworkingTaskDidCompleteErrorKey] = error; //mo: 设置error
-        //mo: 异步添加到group的queue中
+        //mo: 异步回到 自定义group/单例group 自定义线程/主线程
         dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), //mo: 没有会使用-单例group
                              manager.completionQueue ?: dispatch_get_main_queue(), ^{ //mo: 没有会用-主线程
             if (self.completionHandler) {
@@ -204,8 +204,10 @@ static const void * const AuthenticationChallengeErrorKey = &AuthenticationChall
             });
         });
     } else { //mo: 请求成功
-        dispatch_async(url_session_manager_processing_queue(), ^{ //mo: 使用并行队列对响应进行-解析和后续处理，提升解析效率
+        //mo: 使用`progressingQueue`(并行队列)对响应进行`异步`的解析和后续处理，提升解析效率
+        dispatch_async(url_session_manager_processing_queue(), ^{
             NSError *serializationError = nil;
+            //mo: 解析 JSON 数据
             responseObject = [manager.responseSerializer responseObjectForResponse:task.response data:data error:&serializationError];
             if (self.downloadFileURL) {
                 responseObject = self.downloadFileURL;
@@ -216,8 +218,9 @@ static const void * const AuthenticationChallengeErrorKey = &AuthenticationChall
             if (serializationError) {
                 userInfo[AFNetworkingTaskDidCompleteErrorKey] = serializationError;
             }
-            //mo: 处理完成后还是GCD统一处理
-            dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), manager.completionQueue ?: dispatch_get_main_queue(), ^{
+            //mo: 处理完成后, 异步回到 自定义group/单例group 自定义线程/主线程
+            dispatch_group_async(manager.completionGroup ?: url_session_manager_completion_group(), //mo: 没有会使用-单例group
+                                 manager.completionQueue ?: dispatch_get_main_queue(), ^{ //mo: 没有会用-主线程
                 if (self.completionHandler) {
                     self.completionHandler(task.response, responseObject, serializationError);
                 }
@@ -290,7 +293,7 @@ didFinishDownloadingToURL:(NSURL *)location {
 
 @end
 
-#pragma mark -
+#pragma mark - mo: 将`NSURLSessionTask`的`-resume`和`-suspend`替换成自己的
 
 /**
  *  A workaround for issues related to key-value observing the `state` of an `NSURLSessionTask`.
@@ -321,6 +324,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
      WARNING: Trouble Ahead
      https://github.com/AFNetworking/AFNetworking/pull/2702
      */
+    //mo: 将`NSURLSessionTask`的`resume`和`suspend`方法替换成自己的
     if (NSClassFromString(@"NSURLSessionTask")) {
         /**
          iOS 7 and iOS 8 differ in NSURLSessionTask implementation, which makes the next bit of code a bit tricky.
@@ -446,6 +450,11 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     if (!self) {
         return nil;
     }
+    /* mo: NSURLSessionConfiguration 有3个工厂方法
+     defaultSessionConfiguration 返回一个标准的 configuration，这个配置实际上与 NSURLConnection 的网络堆栈（networking stack）是一样的，具有相同的共享 NSHTTPCookieStorage，共享 NSURLCache 和 共享NSURLCredentialStorage
+     ephemeralSessionConfiguration 返回一个预设配置，这个配置中不会对缓存，Cookie 和证书进行持久性的存储。这对于实现像秘密浏览这种功能来说是很理想的
+     backgroundSessionConfigurationWithIdentifier: 它会创建一个后台 session。后台 session 不同于常规的，普通的 session，它甚至可以在应用程序挂起，退出或者崩溃的情况下运行上传和下载任务。初始化时指定的标识符，被用于向任何可能在进程外恢复后台传输的守护进程（daemon）提供上下文
+     */
     if (!configuration) {
         configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
     }
@@ -795,7 +804,7 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
         return self.didFinishEventsForBackgroundURLSession != nil;
     }
 #endif
-    return [[self class] instancesRespondToSelector:selector];
+    return [[self class] instancesRespondToSelector:selector]; //mo: TODO ???
 }
 
 #pragma mark - NSURLSessionDelegate
@@ -814,26 +823,37 @@ static NSString * const AFNSURLSessionTaskDidSuspendNotification = @"com.alamofi
     }
 }
 
-#pragma mark - NSURLSessionTaskDelegate
+#pragma mark - NSURLSessionTaskDelegate mo: 被服务器重定向的时候调用
+// 此方法只会在default session或者ephemeral session中调用，而在background session中，session task会自动重定向
 - (void)URLSession:(NSURLSession *)session
               task:(NSURLSessionTask *)task
 willPerformHTTPRedirection:(NSHTTPURLResponse *)response
         newRequest:(NSURLRequest *)request
  completionHandler:(void (^)(NSURLRequest *))completionHandler {
     NSURLRequest *redirectRequest = request;
+    // mo: step1. 看是否有对应的user block 有的话转发出去，通过这4个参数，返回一个NSURLRequest类型参数，request转发、网络重定向.
     if (self.taskWillPerformHTTPRedirection) {
+        // 用自己自定义的一个重定向的block实现，返回一个新的request。
         redirectRequest = self.taskWillPerformHTTPRedirection(session, task, response, request);
     }
     if (completionHandler) {
+        // step2. 用request重新请求
         completionHandler(redirectRequest);
     }
 }
 
+#pragma mark - mo: https认证
 - (void)URLSession:(NSURLSession *)session
               task:(NSURLSessionTask *)task
 didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
  completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition disposition, NSURLCredential *credential))completionHandler {
     BOOL evaluateServerTrust = NO;
+    /* mo:
+     NSURLSessionAuthChallengeUseCredential：使用指定的证书
+     NSURLSessionAuthChallengePerformDefaultHandling：默认方式处理
+     NSURLSessionAuthChallengeCancelAuthenticationChallenge：取消整个请求
+     NSURLSessionAuthChallengeRejectProtectionSpace：
+     */
     NSURLSessionAuthChallengeDisposition disposition = NSURLSessionAuthChallengePerformDefaultHandling;
     NSURLCredential *credential = nil;
     if (self.authenticationChallengeHandler) {
@@ -854,13 +874,19 @@ didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
             @throw [NSException exceptionWithName:@"Invalid Return Value" reason:@"The return value from the authentication challenge handler must be nil, an NSError, an NSURLCredential or an NSNumber." userInfo:nil];
         }
     } else {
+        //mo: 此处服务器要求客户端的接收认证挑战方法是 NSURLAuthenticationMethodServerTrust，也就是说服务器端需要客户端验证服务器返回的证书信息
         evaluateServerTrust = [challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust];
     }
     if (evaluateServerTrust) {
+        //mo: 客户端根据安全策略验证服务器返回的证书
+        //mo: AFSecurityPolicy 在这里的作用就是，使得在系统底层自己去验证之前，AF可以先去验证服务端的证书。如果通不过，则直接越过系统的验证，取消https的网络请求。否则，继续去走系统根证书的验证（？？）。
         if ([self.securityPolicy evaluateServerTrust:challenge.protectionSpace.serverTrust forDomain:challenge.protectionSpace.host]) {
+            // 信任的话，就创建验证凭证去做系统根证书验证
             disposition = NSURLSessionAuthChallengeUseCredential;
+            // 创建 NSURLCredential 前需要调用 SecTrustEvaluate 方法来验证证书，这件事情其实 AFSecurityPolicy 已经帮我们做了
             credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
         } else {
+            // 不信任的话，就直接取消整个请求
             objc_setAssociatedObject(task, AuthenticationChallengeErrorKey,
                                      [self serverTrustErrorForServerTrust:challenge.protectionSpace.serverTrust url:task.currentRequest.URL],
                                      OBJC_ASSOCIATION_RETAIN);
@@ -1007,6 +1033,7 @@ didBecomeDownloadTask:(NSURLSessionDownloadTask *)downloadTask {
 }
 
 #if !TARGET_OS_OSX
+#pragma mark - mo: 当session中所有已经入队的消息被发送出去后，会调用该代理方法。
 - (void)URLSessionDidFinishEventsForBackgroundURLSession:(NSURLSession *)session {
     if (self.didFinishEventsForBackgroundURLSession) {
         dispatch_async(dispatch_get_main_queue(), ^{
