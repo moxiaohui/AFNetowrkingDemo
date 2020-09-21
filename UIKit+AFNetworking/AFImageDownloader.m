@@ -31,9 +31,7 @@
 @property (nonatomic, copy) void (^successBlock)(NSURLRequest *, NSHTTPURLResponse *, UIImage *);
 @property (nonatomic, copy) void (^failureBlock)(NSURLRequest *, NSHTTPURLResponse *, NSError *);
 @end
-
 @implementation AFImageDownloaderResponseHandler
-
 - (instancetype)initWithUUID:(NSUUID *)uuid
                      success:(nullable void (^)(NSURLRequest *request, NSHTTPURLResponse * _Nullable response, UIImage *responseObject))success
                      failure:(nullable void (^)(NSURLRequest *request, NSHTTPURLResponse * _Nullable response, NSError *error))failure {
@@ -44,11 +42,9 @@
     }
     return self;
 }
-
 - (NSString *)description {
     return [NSString stringWithFormat: @"<AFImageDownloaderResponseHandler>UUID: %@", [self.uuid UUIDString]];
 }
-
 @end
 
 @interface AFImageDownloaderMergedTask : NSObject
@@ -56,11 +52,8 @@
 @property (nonatomic, strong) NSUUID *identifier;
 @property (nonatomic, strong) NSURLSessionDataTask *task;
 @property (nonatomic, strong) NSMutableArray <AFImageDownloaderResponseHandler*> *responseHandlers;
-
 @end
-
 @implementation AFImageDownloaderMergedTask
-
 - (instancetype)initWithURLIdentifier:(NSString *)URLIdentifier identifier:(NSUUID *)identifier task:(NSURLSessionDataTask *)task {
     if (self = [self init]) {
         self.URLIdentifier = URLIdentifier;
@@ -70,19 +63,15 @@
     }
     return self;
 }
-
 - (void)addResponseHandler:(AFImageDownloaderResponseHandler *)handler {
     [self.responseHandlers addObject:handler];
 }
-
 - (void)removeResponseHandler:(AFImageDownloaderResponseHandler *)handler {
     [self.responseHandlers removeObject:handler];
 }
-
 @end
 
 @implementation AFImageDownloadReceipt
-
 - (instancetype)initWithReceiptID:(NSUUID *)receiptID task:(NSURLSessionDataTask *)task {
     if (self = [self init]) {
         self.receiptID = receiptID;
@@ -90,34 +79,26 @@
     }
     return self;
 }
-
 @end
 
 @interface AFImageDownloader ()
-
 @property (nonatomic, strong) dispatch_queue_t synchronizationQueue;
 @property (nonatomic, strong) dispatch_queue_t responseQueue;
-
 @property (nonatomic, assign) NSInteger maximumActiveDownloads;
 @property (nonatomic, assign) NSInteger activeRequestCount;
-
 @property (nonatomic, strong) NSMutableArray *queuedMergedTasks;
 @property (nonatomic, strong) NSMutableDictionary *mergedTasks;
-
 @end
-
 @implementation AFImageDownloader
-
 + (NSURLCache *)defaultURLCache {
-    NSUInteger memoryCapacity = 20 * 1024 * 1024; // 20MB
-    NSUInteger diskCapacity = 150 * 1024 * 1024; // 150MB
+    NSUInteger memoryCapacity = 20 * 1024 * 1024; // 20MB mo:内存
+    NSUInteger diskCapacity = 150 * 1024 * 1024; // 150MB mo:硬盘
     NSURL *cacheURL = [[[NSFileManager defaultManager] URLForDirectory:NSCachesDirectory
                                                               inDomain:NSUserDomainMask
                                                      appropriateForURL:nil
                                                                 create:YES
                                                                  error:nil]
                        URLByAppendingPathComponent:@"com.alamofire.imagedownloader"];
-    
 #if TARGET_OS_MACCATALYST
     return [[NSURLCache alloc] initWithMemoryCapacity:memoryCapacity
                                          diskCapacity:diskCapacity
@@ -131,17 +112,13 @@
 
 + (NSURLSessionConfiguration *)defaultURLSessionConfiguration {
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
-
     //TODO set the default HTTP headers
-
     configuration.HTTPShouldSetCookies = YES;
     configuration.HTTPShouldUsePipelining = NO;
-
     configuration.requestCachePolicy = NSURLRequestUseProtocolCachePolicy;
     configuration.allowsCellularAccess = YES;
     configuration.timeoutIntervalForRequest = 60.0;
     configuration.URLCache = [AFImageDownloader defaultURLCache];
-
     return configuration;
 }
 
@@ -153,7 +130,6 @@
 - (instancetype)initWithSessionConfiguration:(NSURLSessionConfiguration *)configuration {
     AFHTTPSessionManager *sessionManager = [[AFHTTPSessionManager alloc] initWithSessionConfiguration:configuration];
     sessionManager.responseSerializer = [AFImageResponseSerializer serializer];
-
     return [self initWithSessionManager:sessionManager
                  downloadPrioritization:AFImageDownloadPrioritizationFIFO
                  maximumActiveDownloads:4
@@ -166,22 +142,17 @@
                             imageCache:(id <AFImageRequestCache>)imageCache {
     if (self = [super init]) {
         self.sessionManager = sessionManager;
-
         self.downloadPrioritization = downloadPrioritization;
         self.maximumActiveDownloads = maximumActiveDownloads;
         self.imageCache = imageCache;
-
         self.queuedMergedTasks = [[NSMutableArray alloc] init];
         self.mergedTasks = [[NSMutableDictionary alloc] init];
         self.activeRequestCount = 0;
-
         NSString *name = [NSString stringWithFormat:@"com.alamofire.imagedownloader.synchronizationqueue-%@", [[NSUUID UUID] UUIDString]];
         self.synchronizationQueue = dispatch_queue_create([name cStringUsingEncoding:NSASCIIStringEncoding], DISPATCH_QUEUE_SERIAL);
-
         name = [NSString stringWithFormat:@"com.alamofire.imagedownloader.responsequeue-%@", [[NSUUID UUID] UUIDString]];
         self.responseQueue = dispatch_queue_create([name cStringUsingEncoding:NSASCIIStringEncoding], DISPATCH_QUEUE_CONCURRENT);
     }
-
     return self;
 }
 

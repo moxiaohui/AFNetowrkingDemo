@@ -380,7 +380,6 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
 }
 
 #pragma mark -
-// parameters -> [AFQueryStringPair]
 // 将每个pair对象的key和value添加到formData对象维护的段落数组中
 // formData支持三种格式的数据: NSData, FileURL, NSInputStream
 - (NSMutableURLRequest *)multipartFormRequestWithMethod:(NSString *)method
@@ -389,11 +388,14 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
                               constructingBodyWithBlock:(void (^)(id <AFMultipartFormData> formData))block
                                                   error:(NSError *__autoreleasing *)error {
     NSParameterAssert(method);
-    // mo: 不支持GET, HEAD类型
+    //mo: 不支持GET, HEAD类型
     NSParameterAssert(![method isEqualToString:@"GET"] && ![method isEqualToString:@"HEAD"]);
+    //mo: 根据method、URL、parameters、error, 创建mutableRequest
     NSMutableURLRequest *mutableRequest = [self requestWithMethod:method URLString:URLString parameters:nil error:error];
+    //mo: 根据mutableRequest创建formData
     __block AFStreamingMultipartFormData *formData = [[AFStreamingMultipartFormData alloc] initWithURLRequest:mutableRequest stringEncoding:NSUTF8StringEncoding];
     if (parameters) {
+        //mo: parameters -> [AFQueryStringPair], 并将其添加在formData后面
         for (AFQueryStringPair *pair in AFQueryStringPairsFromDictionary(parameters)) {
             NSData *data = nil;
             if ([pair.value isKindOfClass:[NSData class]]) {
@@ -412,7 +414,7 @@ static void *AFHTTPRequestSerializerObserverContext = &AFHTTPRequestSerializerOb
     if (block) {
         block(formData); //mo: formData对象追加参数
     }
-    return [formData requestByFinalizingMultipartFormData];
+    return [formData requestByFinalizingMultipartFormData]; //mo: 设置request
 }
 
 - (NSMutableURLRequest *)requestWithMultipartFormRequest:(NSURLRequest *)request
@@ -758,7 +760,7 @@ NSTimeInterval const kAFUploadStream3GSuggestedDelay = 0.2;
         return self.request;
     }
     // Reset the initial and final boundaries to ensure correct Content-Length
-    //mo: 设置出初始和结尾的边界
+    //mo: 设置bodyStream的初始和结尾边界
     [self.bodyStream setInitialAndFinalBoundaries];
     //mo: 将bodyStream作为请求报文体
     [self.request setHTTPBodyStream:self.bodyStream];
